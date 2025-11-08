@@ -1,0 +1,233 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Light theme aligned with BLASIRA brand (designer.md) */
+  --background: #FFFFFF;
+  --foreground: #1b2b2f;
+  --card: #FFFFFF;
+  --card-foreground: #1b2b2f;
+  --popover: #FFFFFF;
+  --popover-foreground: #1b2b2f;
+  --primary: #1F6773; /* Bleu pétrole */
+  --primary-foreground: #FFFFFF;
+  --secondary: #4B9DA5; /* Bleu sarcelle clair (support) */
+  --secondary-foreground: #0f2024;
+  --muted: #F3F8F8; /* fonds secondaires doux */
+  --muted-foreground: #5d7a7f;
+  --accent: #A5C650; /* Vert olive clair (accent dynamique / succès / hover) */
+  --accent-foreground: #0f2024;
+  --destructive: #C94A4A;
+  --destructive-foreground: #FFFFFF;
+  --border: #E6F0F1; /* bordure subtile */
+  --input: #E6F0F1;
+  --ring: #4B9DA5; /* focus */
+  /* Charts palette bleue-verte */
+  --chart-1: #1F6773;
+  --chart-2: #4B9DA5;
+  --chart-3: #83B04A;
+  --chart-4: #A5C650;
+  --chart-5: #2a4052;
+  /* Soft card radius ~16px */
+  --radius: 1rem;
+  /* Sidebar */
+  --sidebar: #1F6773; /* fond bleu pétrole */
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #A5C650; /* actif */
+  --sidebar-primary-foreground: #0f2024;
+  --sidebar-accent: #4B9DA5; /* hover */
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #16545e;
+  --sidebar-ring: #4B9DA5;
+  /* Status tokens */
+  --success: #A5C650;
+  --success-foreground: #0f2024;
+  --info: #4B9DA5;
+  --info-foreground: #0f2024;
+  --warning: #E3B23C;
+  --warning-foreground: #0f2024;
+}
+
+.dark {
+  /* Dark theme tuned for brand */
+  --background: #0f1416;
+  --foreground: #E8F0F2;
+  --card: #11191b;
+  --card-foreground: #E8F0F2;
+  --popover: #11191b;
+  --popover-foreground: #E8F0F2;
+  --primary: #4B9DA5; /* un peu plus lumineux en dark */
+  --primary-foreground: #0f1416;
+  --secondary: #1F6773;
+  --secondary-foreground: #E8F0F2;
+  --muted: #152024;
+  --muted-foreground: #9fb3b8;
+  --accent: #A5C650;
+  --accent-foreground: #0f1416;
+  --destructive: #C94A4A;
+  --destructive-foreground: #0f1416;
+  --border: #1d2b2f;
+  --input: #1d2b2f;
+  --ring: #4B9DA5;
+  --chart-1: #4B9DA5;
+  --chart-2: #83B04A;
+  --chart-3: #A5C650;
+  --chart-4: #2a4052;
+  --chart-5: #1F6773;
+  --sidebar: #154851;
+  --sidebar-foreground: #E8F0F2;
+  --sidebar-primary: #A5C650;
+  --sidebar-primary-foreground: #0f1416;
+  --sidebar-accent: #1F6773;
+  --sidebar-accent-foreground: #E8F0F2;
+  --sidebar-border: #16363c;
+  --sidebar-ring: #4B9DA5;
+  /* Status tokens (dark) */
+  --success: #A5C650;
+  --success-foreground: #0f1416;
+  --info: #4B9DA5;
+  --info-foreground: #0f1416;
+  --warning: #E3B23C;
+  --warning-foreground: #0f1416;
+}
+
+@theme inline {
+  --font-sans: "Inter", "Inter Fallback", ui-sans-serif, system-ui, -apple-system;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Stronger, consistent focus rings */
+:where(button, a, input, select, textarea, [role="button"]):focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--ring), transparent 70%);
+  border-radius: 6px;
+}
+
+/* Skip link */
+.skip-link {
+  position: absolute;
+  left: -10000px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.skip-link:focus {
+  left: 16px;
+  top: 16px;
+  width: auto;
+  height: auto;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  padding: 6px 10px;
+  border-radius: 6px;
+  z-index: 1000;
+}
+
+/* Hide Next.js dev indicator/badge in dev */
+:where(
+  #nextjs__container_build_error,
+  #nextjs-dev-overlay,
+  [data-nextjs-react-dev-overlay-root],
+  #nextjs-build-watcher,
+  [data-nextjs-build-watcher],
+  .nextjs-container-build-error,
+  .nextjs-dev-overlay,
+  .__next-dev-indicator
+) {
+  display: none !important;
+}
+
+/* Animated background helpers for login */
+@keyframes blob {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(24px, -32px, 0) scale(1.08);
+  }
+  66% {
+    transform: translate3d(-20px, 20px, 0) scale(0.96);
+  }
+}
+.animate-blob {
+  animation: blob 18s ease-in-out infinite;
+  filter: blur(84px);
+}
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
+
+/* Animated gradient sweep for hero and borders */
+@keyframes gradient-x {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+.animate-gradient-x {
+  background-size: 200% 200%;
+  animation: gradient-x 12s ease infinite;
+}
+.gradient-animated-border {
+  background: linear-gradient(90deg, var(--primary), var(--accent), var(--ring));
+  background-size: 200% 200%;
+  animation: gradient-x 10s ease infinite;
+  border-radius: var(--radius-xl);
+}
