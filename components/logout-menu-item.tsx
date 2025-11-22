@@ -3,12 +3,16 @@
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { LogOut } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { removeToken } from '@/lib/auth'
 
 export function LogoutMenuItem() {
 	const router = useRouter()
 
 	function handleLogout() {
 		try {
+			// Supprimer le token d'authentification
+			removeToken()
+			
 			// Clear common client storages
 			if (typeof localStorage !== 'undefined') {
 				localStorage.clear()

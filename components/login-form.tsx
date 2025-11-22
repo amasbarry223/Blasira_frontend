@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
-import { EyeIcon, EyeOffIcon, LogInIcon, MailIcon, LockIcon, ArrowRightIcon } from 'lucide-react'
+import { EyeIcon, EyeOffIcon, LogInIcon, MailIcon, LockIcon, AlertCircle, XCircle } from 'lucide-react'
 import Image from 'next/image'
+import { toast } from 'sonner'
 import logo from '@/assets/logo.png'
 
 import { cn } from '@/lib/utils'
@@ -15,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Spinner } from '@/components/ui/spinner'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
 	Form,
 	FormControl,
@@ -23,20 +25,27 @@ import {
 	FormLabel,
 	FormMessage,
 } from '@/components/ui/form'
+import { AuthService } from '@/services/AuthService'
+import { saveToken } from '@/lib/auth'
 
 
 const schema = z.object({
 	email: z.string().min(1, 'Email requis').email("Email invalide"),
-	password: z.string().min(8, 'Au moins 8 caractères'),
+	password: z.string().min(1, 'Mot de passe requis'),
 	remember: z.boolean().optional().default(false),
 })
 
 type FormValues = z.infer<typeof schema>
 
+type ErrorType = 'email' | 'password' | 'general' | null
+
 export function LoginForm({ className }: { className?: string }) {
 	const router = useRouter()
 	const [isSubmitting, setIsSubmitting] = React.useState(false)
 	const [showPassword, setShowPassword] = React.useState(false)
+	const [errorType, setErrorType] = React.useState<ErrorType>(null)
+	const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
+	const authService = React.useMemo(() => new AuthService(), [])
 
 	const form = useForm<FormValues>({
 		mode: 'onTouched',
@@ -48,13 +57,145 @@ export function LoginForm({ className }: { className?: string }) {
 		},
 	})
 
+	// Fonction pour analyser et formater les erreurs
+	function parseError(error: unknown): { type: ErrorType; message: string } {
+		if (!(error instanceof Error)) {
+			return { type: 'general', message: 'Une erreur est survenue lors de la connexion' }
+		}
+
+		const errorAny = error as any
+		const status = errorAny.status
+		const errorData = errorAny.errorData || {}
+		const message = error.message.toLowerCase()
+
+		// Analyser le message d'erreur pour déterminer le type
+		if (
+			status === 401 ||
+			message.includes('401') ||
+			message.includes('unauthorized') ||
+			message.includes('bad credentials') ||
+			message.includes('invalid credentials')
+		) {
+			// Vérifier si le message indique spécifiquement l'email ou le mot de passe
+			if (
+				message.includes('email') ||
+				message.includes('utilisateur') ||
+				message.includes('user') ||
+				message.includes('compte') ||
+				errorData.field === 'email'
+			) {
+				return {
+					type: 'email',
+					message: "L'adresse e-mail est incorrecte ou n'existe pas",
+				}
+			}
+
+			if (
+				message.includes('password') ||
+				message.includes('mot de passe') ||
+				message.includes('mdp') ||
+				errorData.field === 'password'
+			) {
+				return {
+					type: 'password',
+					message: 'Le mot de passe est incorrect',
+				}
+			}
+
+			// Par défaut, si c'est une erreur 401, on considère que c'est les identifiants
+			return {
+				type: 'general',
+				message: "L'adresse e-mail ou le mot de passe est incorrect",
+			}
+		}
+
+		if (status === 404 || message.includes('404') || message.includes('not found')) {
+			return {
+				type: 'general',
+				message: "Service d'authentification indisponible. Veuillez réessayer plus tard.",
+			}
+		}
+
+		if (
+			status === 500 ||
+			status === 502 ||
+			status === 503 ||
+			message.includes('500') ||
+			message.includes('502') ||
+			message.includes('503')
+		) {
+			return {
+				type: 'general',
+				message: 'Erreur serveur. Veuillez réessayer dans quelques instants.',
+			}
+		}
+
+		if (message.includes('network') || message.includes('fetch') || message.includes('failed to fetch')) {
+			return {
+				type: 'general',
+				message: 'Problème de connexion. Vérifiez votre connexion internet.',
+			}
+		}
+
+		// Message par défaut
+		return {
+			type: 'general',
+			message: error.message || 'Une erreur est survenue lors de la connexion',
+		}
+	}
+
 	async function onSubmit(values: FormValues) {
 		setIsSubmitting(true)
+		setErrorType(null)
+		setErrorMessage(null)
+
+		// Réinitialiser les erreurs des champs
+		form.clearErrors('email')
+		form.clearErrors('password')
+
 		try {
-			// Simule une requête réseau
-			await new Promise((r) => setTimeout(r, 900))
-			// Redirection vers le tableau de bord (remplacer par votre logique d'auth)
+			const response = await authService.login({
+				email: values.email,
+				password: values.password,
+			})
+
+			// Sauvegarder le token
+			saveToken(response.token)
+
+			// Afficher un message de succès
+			toast.success('Connexion réussie', {
+				description: 'Redirection vers le tableau de bord...',
+			})
+
+			// Redirection vers le tableau de bord
 			router.push('/admin/dashboard')
+		} catch (error) {
+			const parsedError = parseError(error)
+
+			setErrorType(parsedError.type)
+			setErrorMessage(parsedError.message)
+
+			// Définir l'erreur sur le champ approprié
+			if (parsedError.type === 'email') {
+				form.setError('email', {
+					type: 'manual',
+					message: parsedError.message,
+				})
+			} else if (parsedError.type === 'password') {
+				form.setError('password', {
+					type: 'manual',
+					message: parsedError.message,
+				})
+			}
+
+			// Afficher un toast avec le message d'erreur
+			toast.error('Échec de la connexion', {
+				description: parsedError.message,
+				duration: 5000,
+			})
+
+			// Réinitialiser le mot de passe
+			form.setValue('password', '')
 		} finally {
 			setIsSubmitting(false)
 		}
@@ -72,73 +213,139 @@ export function LoginForm({ className }: { className?: string }) {
 			<CardContent>
 				<Form {...form}>
 					<form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-5">
+						{/* Message d'erreur général */}
+						{errorType === 'general' && errorMessage && (
+							<Alert
+								variant="destructive"
+								className="animate-in slide-in-from-top-2 fade-in duration-300"
+							>
+								<XCircle className="h-4 w-4" />
+								<AlertTitle className="font-semibold">Erreur de connexion</AlertTitle>
+								<AlertDescription className="mt-1">{errorMessage}</AlertDescription>
+							</Alert>
+						)}
+
 						<FormField
 							name="email"
 							control={form.control}
-							render={({ field }) => (
-								<FormItem>
-									<FormLabel className="text-primary">Adresse e-mail</FormLabel>
-									<FormControl>
-										<div className="grid gap-2">
-											<Label htmlFor="email" className="sr-only">Email</Label>
-											<div className="relative">
-												<MailIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-												<div className="bg-input/30 dark:bg-input/30 rounded-md h-11 flex items-center transition focus-within:ring-0">
-													<input
-														id="email"
-														placeholder="vous@exemple.com"
-														type="email"
-														autoComplete="email"
-														inputMode="email"
-														className="h-11 w-full bg-transparent outline-none focus-visible:outline-none ring-0 focus:ring-0 border-0 pl-11 pr-3 text-base md:text-sm"
-														{...field}
+							render={({ field }) => {
+								const hasError = form.formState.errors.email || errorType === 'email'
+								return (
+									<FormItem>
+										<FormLabel className="text-primary">Adresse e-mail</FormLabel>
+										<FormControl>
+											<div className="grid gap-2">
+												<Label htmlFor="email" className="sr-only">Email</Label>
+												<div className="relative">
+													<MailIcon
+														className={cn(
+															'absolute left-3 top-1/2 -translate-y-1/2 transition-colors',
+															hasError ? 'text-destructive' : 'text-muted-foreground'
+														)}
 													/>
+													<div
+														className={cn(
+															'bg-input/30 dark:bg-input/30 rounded-md h-11 flex items-center transition-all',
+															hasError
+																? 'border border-destructive focus-within:border-destructive focus-within:ring-2 focus-within:ring-destructive/20'
+																: 'border border-transparent focus-within:ring-2 focus-within:ring-primary/20'
+														)}
+													>
+														<input
+															id="email"
+															placeholder="vous@exemple.com"
+															type="email"
+															autoComplete="email"
+															inputMode="email"
+															className={cn(
+																'h-11 w-full bg-transparent outline-none focus-visible:outline-none ring-0 focus:ring-0 border-0 pl-11 pr-3 text-base md:text-sm transition-colors',
+																hasError && 'text-destructive placeholder:text-destructive/50'
+															)}
+															{...field}
+															onChange={(e) => {
+																field.onChange(e)
+																// Effacer l'erreur quand l'utilisateur commence à taper
+																if (errorType === 'email') {
+																	setErrorType(null)
+																	setErrorMessage(null)
+																	form.clearErrors('email')
+																}
+															}}
+														/>
+													</div>
 												</div>
 											</div>
-										</div>
-									</FormControl>
-									<FormMessage />
-								</FormItem>
-							)}
+										</FormControl>
+										<FormMessage />
+									</FormItem>
+								)
+							}}
 						/>
 
 						<FormField
 							name="password"
 							control={form.control}
-							render={({ field }) => (
-								<FormItem>
-									<FormLabel className="text-primary">Mot de passe</FormLabel>
-									<FormControl>
-										<div className="grid gap-2">
-											<Label htmlFor="password" className="sr-only">Mot de passe</Label>
-											<div className="relative">
-												<LockIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-												<div className="bg-input/30 dark:bg-input/30 rounded-md h-11 flex items-center transition focus-within:ring-0">
-													<input
-														id="password"
-														placeholder="••••••••"
-														type={showPassword ? 'text' : 'password'}
-														autoComplete="current-password"
-														className="h-11 w-full bg-transparent outline-none focus-visible:outline-none ring-0 focus:ring-0 border-0 pl-11 pr-10 text-base md:text-sm"
-														{...field}
+							render={({ field }) => {
+								const hasError = form.formState.errors.password || errorType === 'password'
+								return (
+									<FormItem>
+										<FormLabel className="text-primary">Mot de passe</FormLabel>
+										<FormControl>
+											<div className="grid gap-2">
+												<Label htmlFor="password" className="sr-only">Mot de passe</Label>
+												<div className="relative">
+													<LockIcon
+														className={cn(
+															'absolute left-3 top-1/2 -translate-y-1/2 transition-colors',
+															hasError ? 'text-destructive' : 'text-muted-foreground'
+														)}
 													/>
-													<Button
-														type="button"
-														variant="ghost"
-														size="icon"
-														aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-														onClick={() => setShowPassword((v) => !v)}
-														className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9"
+													<div
+														className={cn(
+															'bg-input/30 dark:bg-input/30 rounded-md h-11 flex items-center transition-all',
+															hasError
+																? 'border border-destructive focus-within:border-destructive focus-within:ring-2 focus-within:ring-destructive/20'
+																: 'border border-transparent focus-within:ring-2 focus-within:ring-primary/20'
+														)}
 													>
-														{showPassword ? <EyeOffIcon /> : <EyeIcon />}
-													</Button>
+														<input
+															id="password"
+															placeholder="••••••••"
+															type={showPassword ? 'text' : 'password'}
+															autoComplete="current-password"
+															className={cn(
+																'h-11 w-full bg-transparent outline-none focus-visible:outline-none ring-0 focus:ring-0 border-0 pl-11 pr-10 text-base md:text-sm transition-colors',
+																hasError && 'text-destructive placeholder:text-destructive/50'
+															)}
+															{...field}
+															onChange={(e) => {
+																field.onChange(e)
+																// Effacer l'erreur quand l'utilisateur commence à taper
+																if (errorType === 'password') {
+																	setErrorType(null)
+																	setErrorMessage(null)
+																	form.clearErrors('password')
+																}
+															}}
+														/>
+														<Button
+															type="button"
+															variant="ghost"
+															size="icon"
+															aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+															onClick={() => setShowPassword((v) => !v)}
+															className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9"
+														>
+															{showPassword ? <EyeOffIcon /> : <EyeIcon />}
+														</Button>
+													</div>
 												</div>
 											</div>
-										</div>
-									</FormControl>
-									<FormMessage />
-								</FormItem>
-							)}
+										</FormControl>
+										<FormMessage />
+									</FormItem>
+								)
+							}}
 						/>
 
 						<div className="flex items-center justify-between">

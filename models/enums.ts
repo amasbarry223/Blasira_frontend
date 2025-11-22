@@ -1,0 +1,83 @@
+// Enums pour les statuts et types de l'application
+
+export enum BookingStatus {
+  CANCELLED_BY_PASSENGER = 'CANCELLED_BY_PASSENGER',
+  CONFIRMED_BY_DRIVER = 'CONFIRMED_BY_DRIVER',
+  REJECTED_BY_DRIVER = 'REJECTED_BY_DRIVER',
+  REQUESTED_BY_PASSENGER = 'REQUESTED_BY_PASSENGER',
+}
+
+export enum DocumentType {
+  DRIVING_LICENSE = 'DRIVING_LICENSE',
+  IDENTITY_CARD = 'IDENTITY_CARD',
+  INSURANCE = 'INSURANCE',
+  VEHICLE_REGISTRATION = 'VEHICLE_REGISTRATION',
+}
+
+export enum DocumentStatus {
+  PENDING_REVIEW = 'PENDING_REVIEW',
+  REJECTED = 'REJECTED',
+  VERIFIED = 'VERIFIED',
+}
+
+export enum DriverProfileStatus {
+  NOT_SUBMITTED = 'NOT_SUBMITTED',
+  PENDING_REVIEW = 'PENDING_REVIEW',
+  REJECTED = 'REJECTED',
+  SUSPENDED = 'SUSPENDED',
+  VERIFIED = 'VERIFIED',
+}
+
+export enum IncidentReportStatus {
+  CLOSED = 'CLOSED',
+  OPEN = 'OPEN',
+  RESOLVED = 'RESOLVED',
+  UNDER_REVIEW = 'UNDER_REVIEW',
+}
+
+export enum PaymentMethod {
+  CASH = 'CASH',
+  CREDIT_CARD = 'CREDIT_CARD',
+  MOBILE_MONEY = 'MOBILE_MONEY',
+}
+
+export enum PaymentStatus {
+  CANCELLED = 'CANCELLED',
+  FAILED = 'FAILED',
+  PENDING = 'PENDING',
+  SUCCESSFUL = 'SUCCESSFUL',
+}
+
+export enum DiscountType {
+  FIXED_AMOUNT = 'FIXED_AMOUNT',
+  PERCENTAGE = 'PERCENTAGE',
+}
+
+export enum ReviewType {
+  DRIVER_TO_PASSENGER = 'DRIVER_TO_PASSENGER',
+  PASSENGER_TO_DRIVER = 'PASSENGER_TO_DRIVER',
+}
+
+export enum TripStatus {
+  CANCELLED = 'CANCELLED',
+  COMPLETED = 'COMPLETED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  PLANNED = 'PLANNED',
+}
+
+export enum UserRole {
+  ROLE_ADMIN = 'ROLE_ADMIN',
+  ROLE_USER = 'ROLE_USER',
+}
+
+export enum VehicleType {
+  CAR = 'CAR',
+  MOTORCYCLE = 'MOTORCYCLE',
+}
+
+export enum VehicleVerificationStatus {
+  PENDING_REVIEW = 'PENDING_REVIEW',
+  REJECTED = 'REJECTED',
+  VERIFIED = 'VERIFIED',
+}
+

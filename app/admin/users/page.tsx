@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
+import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -18,7 +19,6 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Search, Filter, CheckCircle, XCircle, Eye, Ban, Mail, UserPlus, Users, X, ArrowUpDown } from "lucide-react"
 import { Label } from "@/components/ui/label"
-import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import {
   Breadcrumb,
@@ -39,58 +39,26 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
+import { AdminService } from "@/services/AdminService"
+import { AdminUser } from "@/models"
+import { Spinner } from "@/components/ui/spinner"
 
-const mockUsers = [
-  {
-    id: 1,
-    name: "Amadou Diallo",
-    email: "amadou.diallo@univ.ml",
-    phone: "+223 70 12 34 56",
-    status: "verified",
-    role: "student",
-    tripsCount: 24,
-    rating: 4.8,
-    joinedDate: "2024-01-15",
-  },
-  {
-    id: 2,
-    name: "Fatoumata Traoré",
-    email: "fatoumata.t@gmail.com",
-    phone: "+223 75 98 76 54",
-    status: "pending",
-    role: "driver",
-    tripsCount: 45,
-    rating: 4.9,
-    joinedDate: "2024-02-20",
-  },
-  {
-    id: 3,
-    name: "Mamadou Keita",
-    email: "mamadou.k@univ.ml",
-    phone: "+223 76 54 32 10",
-    status: "active",
-    role: "student",
-    tripsCount: 12,
-    rating: 4.5,
-    joinedDate: "2024-03-10",
-  },
-  {
-    id: 4,
-    name: "Aissata Sanogo",
-    email: "aissata.s@gmail.com",
-    phone: "+223 78 11 22 33",
-    status: "suspended",
-    role: "passenger",
-    tripsCount: 8,
-    rating: 4.2,
-    joinedDate: "2024-04-05",
-  },
-]
+// Type pour les utilisateurs avec les données complètes pour l'affichage
+type DisplayUser = AdminUser & {
+  name: string;
+  phone?: string;
+  status: string;
+  role: string;
+  tripsCount?: number;
+  rating?: number;
+  joinedDate?: string;
+}
 
 export default function UsersPage() {
-  const { toast } = useToast()
+  const [users, setUsers] = useState<AdminUser[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedUser, setSelectedUser] = useState<(typeof mockUsers)[0] | null>(null)
+  const [selectedUser, setSelectedUser] = useState<DisplayUser | null>(null)
   const [filterStatus, setFilterStatus] = useState<string>("all")
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [newUser, setNewUser] = useState({
@@ -111,17 +79,47 @@ export default function UsersPage() {
     return raw ? JSON.parse(raw) : { contact: true, status: true, role: true, trips: true, rating: true, actions: true }
   })
 
+  const adminService = React.useMemo(() => new AdminService(), [])
+
+  // Charger les utilisateurs depuis l'API
+  useEffect(() => {
+    const loadUsers = async () => {
+      setIsLoading(true)
+      try {
+        const data = await adminService.getAllUsers()
+        setUsers(data)
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Erreur lors du chargement des utilisateurs'
+        toast.error("Erreur", {
+          description: errorMessage,
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadUsers()
+  }, [adminService, toast])
+
+  // Convertir les utilisateurs de l'API en format d'affichage
+  const displayUsers: DisplayUser[] = users.map((user) => ({
+    ...user,
+    name: `${user.firstName} ${user.lastName}`,
+    status: "active", // Par défaut, vous pouvez adapter selon vos besoins
+    role: user.roles.includes("ROLE_ADMIN") ? "admin" : user.roles.includes("ROLE_USER") ? "user" : "user",
+    tripsCount: 0, // À adapter si vous avez ces données
+    rating: 0, // À adapter si vous avez ces données
+    joinedDate: "", // À adapter si vous avez ces données
+  }))
+
   const handleCreateUser = () => {
     if (!newUser.name || !newUser.email) {
-      toast({
-        title: "Champs requis",
+      toast.error("Champs requis", {
         description: "Veuillez renseigner au minimum le nom et l'email.",
-        variant: "destructive",
       })
       return
     }
-    toast({
-      title: "Utilisateur ajouté",
+    toast.success("Utilisateur ajouté", {
       description: `${newUser.name} a été créé avec succès.`,
     })
     setShowAddDialog(false)
@@ -134,10 +132,12 @@ export default function UsersPage() {
     })
   }
 
-  const filteredUsers = mockUsers.filter((user) => {
+  const filteredUsers = displayUsers.filter((user) => {
     const matchesSearch =
       user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase())
+      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.lastName.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesFilter = filterStatus === "all" || user.status === filterStatus
     return matchesSearch && matchesFilter
   }).slice().sort((a, b) => {
@@ -150,18 +150,18 @@ export default function UsersPage() {
       case "role":
         return a.role.localeCompare(b.role) * dir
       case "tripsCount":
-        return (a.tripsCount - b.tripsCount) * dir
+        return ((a.tripsCount || 0) - (b.tripsCount || 0)) * dir
       case "rating":
-        return (a.rating - b.rating) * dir
+        return ((a.rating || 0) - (b.rating || 0)) * dir
     }
   })
 
   const totals = {
-    all: mockUsers.length,
-    verified: mockUsers.filter((u) => u.status === "verified").length,
-    pending: mockUsers.filter((u) => u.status === "pending").length,
-    active: mockUsers.filter((u) => u.status === "active").length,
-    suspended: mockUsers.filter((u) => u.status === "suspended").length,
+    all: displayUsers.length,
+    verified: displayUsers.filter((u) => u.status === "verified").length,
+    pending: displayUsers.filter((u) => u.status === "pending").length,
+    active: displayUsers.filter((u) => u.status === "active").length,
+    suspended: displayUsers.filter((u) => u.status === "suspended").length,
   }
 
   // Client-side pagination
@@ -227,8 +227,7 @@ export default function UsersPage() {
   }, [])
 
   const handleVerifyUser = (userId: number, verified: boolean) => {
-    toast({
-      title: verified ? "Utilisateur vérifié" : "Vérification refusée",
+    toast.success(verified ? "Utilisateur vérifié" : "Vérification refusée", {
       description: verified ? "L'utilisateur a reçu le badge vérifié." : "L'utilisateur a été notifié.",
     })
     setSelectedUser(null)
@@ -240,10 +239,8 @@ export default function UsersPage() {
       title: "Suspendre l'utilisateur ?",
       description: "Cette action restreindra l'accès de l'utilisateur à la plateforme.",
       onConfirm: () => {
-    toast({
-      title: "Utilisateur suspendu",
-      description: "L'utilisateur ne pourra plus accéder à la plateforme.",
-      variant: "destructive",
+        toast.error("Utilisateur suspendu", {
+          description: "L'utilisateur ne pourra plus accéder à la plateforme.",
         })
         setConfirmState({ ...confirmState, open: false })
       },
@@ -325,9 +322,16 @@ export default function UsersPage() {
         <Card>
           <CardHeader>
             <CardTitle>Liste des utilisateurs</CardTitle>
-            <CardDescription>Total: {mockUsers.length} utilisateurs inscrits</CardDescription>
+            <CardDescription>Total: {users.length} utilisateurs inscrits</CardDescription>
           </CardHeader>
           <CardContent>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Spinner className="mr-2" />
+                <span className="text-muted-foreground">Chargement des utilisateurs...</span>
+              </div>
+            ) : (
+              <>
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -522,7 +526,25 @@ export default function UsersPage() {
                         </div>
                       </TableCell>}
                       {visible.status && <TableCell>{getStatusBadge(user.status)}</TableCell>}
-                      {visible.role && <TableCell className="capitalize">{user.role}</TableCell>}
+                      {visible.role && (
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {user.roles.map((role) => (
+                              <Badge
+                                key={role}
+                                variant="outline"
+                                className={
+                                  role === "ROLE_ADMIN"
+                                    ? "bg-primary/10 text-primary border-primary/20"
+                                    : "bg-muted text-muted-foreground"
+                                }
+                              >
+                                {role === "ROLE_ADMIN" ? "Admin" : "Utilisateur"}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                      )}
                       {visible.trips && <TableCell>{user.tripsCount}</TableCell>}
                       {visible.rating && <TableCell>
                         <div className="flex items-center gap-1">
@@ -614,6 +636,8 @@ export default function UsersPage() {
                 </Pagination>
               </div>
             </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
