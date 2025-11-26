@@ -231,12 +231,12 @@ export function LoginForm({ className }: { className?: string }) {
 							render={({ field }) => {
 								const hasError = form.formState.errors.email || errorType === 'email'
 								return (
-									<FormItem>
-										<FormLabel className="text-primary">Adresse e-mail</FormLabel>
-										<FormControl>
-											<div className="grid gap-2">
-												<Label htmlFor="email" className="sr-only">Email</Label>
-												<div className="relative">
+								<FormItem>
+									<FormLabel className="text-primary">Adresse e-mail</FormLabel>
+									<FormControl>
+										<div className="grid gap-2">
+											<Label htmlFor="email" className="sr-only">Email</Label>
+											<div className="relative">
 													<MailIcon
 														className={cn(
 															'absolute left-3 top-1/2 -translate-y-1/2 transition-colors',
@@ -251,17 +251,17 @@ export function LoginForm({ className }: { className?: string }) {
 																: 'border border-transparent focus-within:ring-2 focus-within:ring-primary/20'
 														)}
 													>
-														<input
-															id="email"
-															placeholder="vous@exemple.com"
-															type="email"
-															autoComplete="email"
-															inputMode="email"
+													<input
+														id="email"
+														placeholder="vous@exemple.com"
+														type="email"
+														autoComplete="email"
+														inputMode="email"
 															className={cn(
 																'h-11 w-full bg-transparent outline-none focus-visible:outline-none ring-0 focus:ring-0 border-0 pl-11 pr-3 text-base md:text-sm transition-colors',
 																hasError && 'text-destructive placeholder:text-destructive/50'
 															)}
-															{...field}
+														{...field}
 															onChange={(e) => {
 																field.onChange(e)
 																// Effacer l'erreur quand l'utilisateur commence à taper
@@ -271,13 +271,13 @@ export function LoginForm({ className }: { className?: string }) {
 																	form.clearErrors('email')
 																}
 															}}
-														/>
-													</div>
+													/>
 												</div>
 											</div>
-										</FormControl>
-										<FormMessage />
-									</FormItem>
+										</div>
+									</FormControl>
+									<FormMessage />
+								</FormItem>
 								)
 							}}
 						/>
@@ -288,12 +288,12 @@ export function LoginForm({ className }: { className?: string }) {
 							render={({ field }) => {
 								const hasError = form.formState.errors.password || errorType === 'password'
 								return (
-									<FormItem>
-										<FormLabel className="text-primary">Mot de passe</FormLabel>
-										<FormControl>
-											<div className="grid gap-2">
-												<Label htmlFor="password" className="sr-only">Mot de passe</Label>
-												<div className="relative">
+								<FormItem>
+									<FormLabel className="text-primary">Mot de passe</FormLabel>
+									<FormControl>
+										<div className="grid gap-2">
+											<Label htmlFor="password" className="sr-only">Mot de passe</Label>
+											<div className="relative">
 													<LockIcon
 														className={cn(
 															'absolute left-3 top-1/2 -translate-y-1/2 transition-colors',
@@ -308,16 +308,16 @@ export function LoginForm({ className }: { className?: string }) {
 																: 'border border-transparent focus-within:ring-2 focus-within:ring-primary/20'
 														)}
 													>
-														<input
-															id="password"
-															placeholder="••••••••"
-															type={showPassword ? 'text' : 'password'}
-															autoComplete="current-password"
+													<input
+														id="password"
+														placeholder="••••••••"
+														type={showPassword ? 'text' : 'password'}
+														autoComplete="current-password"
 															className={cn(
 																'h-11 w-full bg-transparent outline-none focus-visible:outline-none ring-0 focus:ring-0 border-0 pl-11 pr-10 text-base md:text-sm transition-colors',
 																hasError && 'text-destructive placeholder:text-destructive/50'
 															)}
-															{...field}
+														{...field}
 															onChange={(e) => {
 																field.onChange(e)
 																// Effacer l'erreur quand l'utilisateur commence à taper
@@ -327,23 +327,23 @@ export function LoginForm({ className }: { className?: string }) {
 																	form.clearErrors('password')
 																}
 															}}
-														/>
-														<Button
-															type="button"
-															variant="ghost"
-															size="icon"
-															aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-															onClick={() => setShowPassword((v) => !v)}
-															className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9"
-														>
-															{showPassword ? <EyeOffIcon /> : <EyeIcon />}
-														</Button>
-													</div>
+													/>
+													<Button
+														type="button"
+														variant="ghost"
+														size="icon"
+														aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+														onClick={() => setShowPassword((v) => !v)}
+														className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9"
+													>
+														{showPassword ? <EyeOffIcon /> : <EyeIcon />}
+													</Button>
 												</div>
 											</div>
-										</FormControl>
-										<FormMessage />
-									</FormItem>
+										</div>
+									</FormControl>
+									<FormMessage />
+								</FormItem>
 								)
 							}}
 						/>

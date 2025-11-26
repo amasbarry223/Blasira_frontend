@@ -5,11 +5,16 @@
 const TOKEN_KEY = 'blasira_auth_token';
 
 /**
- * Sauvegarde le token dans le localStorage
+ * Sauvegarde le token dans le localStorage et les cookies
  */
 export function saveToken(token: string): void {
   if (typeof window !== 'undefined') {
     localStorage.setItem(TOKEN_KEY, token);
+    
+    // Sauvegarder aussi dans les cookies pour le middleware
+    const expires = new Date();
+    expires.setTime(expires.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 jours
+    document.cookie = `${TOKEN_KEY}=${token}; expires=${expires.toUTCString()}; path=/; SameSite=Lax`;
   }
 }
 
@@ -24,11 +29,14 @@ export function getToken(): string | null {
 }
 
 /**
- * Supprime le token du localStorage
+ * Supprime le token du localStorage et des cookies
  */
 export function removeToken(): void {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(TOKEN_KEY);
+    
+    // Supprimer aussi des cookies
+    document.cookie = `${TOKEN_KEY}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
   }
 }
 
