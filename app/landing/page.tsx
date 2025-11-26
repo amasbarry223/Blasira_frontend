@@ -413,41 +413,6 @@ export default function LandingPage() {
               </Link>
             </motion.div>
 
-            {/* App Store Badges */}
-            <motion.div
-              className="flex flex-col sm:flex-row gap-4 justify-center items-center mt-8"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.9, duration: 0.6 }}
-            >
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="cursor-pointer"
-              >
-                <div className="flex items-center gap-3 px-6 py-3 bg-card/80 backdrop-blur-sm border-2 border-border rounded-xl hover:border-primary/50 transition-all shadow-lg hover:shadow-xl">
-                  <Smartphone className="h-6 w-6 text-primary" />
-                  <div className="text-left">
-                    <div className="text-xs text-muted-foreground">Télécharger sur</div>
-                    <div className="text-sm font-semibold text-foreground">App Store</div>
-                  </div>
-                </div>
-              </motion.div>
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="cursor-pointer"
-              >
-                <div className="flex items-center gap-3 px-6 py-3 bg-card/80 backdrop-blur-sm border-2 border-border rounded-xl hover:border-accent/50 transition-all shadow-lg hover:shadow-xl">
-                  <Smartphone className="h-6 w-6 text-accent" />
-                  <div className="text-left">
-                    <div className="text-xs text-muted-foreground">Disponible sur</div>
-                    <div className="text-sm font-semibold text-foreground">Google Play</div>
-                  </div>
-                </div>
-              </motion.div>
-            </motion.div>
-
             {/* Stats */}
             <motion.div
               className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 mt-12 sm:mt-16 px-4 sm:px-0"
@@ -832,7 +797,7 @@ export default function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border bg-muted/30 py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
+      <footer className="border-t border-gray-800 bg-black py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
         <div className="container mx-auto max-w-6xl">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 sm:gap-8 mb-6 sm:mb-8">
             <div>
@@ -840,39 +805,39 @@ export default function LandingPage() {
                 <Logo width={32} height={32} className="rounded-md" />
                 <span className="text-lg font-semibold text-primary">Blasira</span>
               </div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-gray-400">
                 La plateforme de covoiturage qui vous connecte. Disponible sur iOS, Android et Web.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold mb-4">Plateformes</h3>
-              <ul className="space-y-2 text-sm text-muted-foreground">
+              <h3 className="font-semibold mb-4 text-white">Plateformes</h3>
+              <ul className="space-y-2 text-sm text-gray-400">
                 <li>Application iOS</li>
                 <li>Application Android</li>
                 <li>Site Web</li>
               </ul>
             </div>
             <div>
-              <h3 className="font-semibold mb-4">Contact</h3>
-              <ul className="space-y-2 text-sm text-muted-foreground">
+              <h3 className="font-semibold mb-4 text-white">Contact</h3>
+              <ul className="space-y-2 text-sm text-gray-400">
                 <li>Support</li>
                 <li>À propos</li>
                 <li>Politique de confidentialité</li>
               </ul>
             </div>
           </div>
-          <div className="border-t border-border pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <p className="text-sm text-muted-foreground text-center sm:text-left">
+          <div className="border-t border-gray-800 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <p className="text-sm text-gray-400 text-center sm:text-left">
               © 2025 Blasira. Tous droits réservés.
             </p>
             <div className="flex gap-4">
-              <Button variant="ghost" size="sm" className="text-muted-foreground">
+              <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
                 iOS
               </Button>
-              <Button variant="ghost" size="sm" className="text-muted-foreground">
+              <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
                 Android
               </Button>
-              <Button variant="ghost" size="sm" className="text-muted-foreground">
+              <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
                 Web
               </Button>
             </div>
