@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,53 +26,125 @@ import {
   Save,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { AppConfigService } from "@/services/AppConfigService"
+import { AppConfig } from "@/models"
+import { Spinner } from "@/components/ui/spinner"
+
+const initialSettings: AppConfig = {
+  general: { platformName: "", platformEmail: "", platformPhone: "", supportEmail: "", timezone: "", language: "" },
+  trips: { maxPassengersPerTrip: 0, minTripPrice: 0, maxTripPrice: 0, autoApproveTrips: false },
+  features: { enableReviews: false, enableChat: false },
+  security: { requireEmailVerification: false, requirePhoneVerification: false, requirePhotoVerification: false, allowStudentOnly: false, dataRetentionDays: 0 },
+  notifications: {
+    admin: { notifyNewUsers: false, notifyNewTrips: false, notifyIncidents: false, notifyReports: false },
+    channels: { emailNotifications: false, smsNotifications: false, pushNotifications: false }
+  },
+  payments: { commissionRate: 0, currency: "" },
+  system: { maintenanceMode: false, backupFrequency: "" },
+};
 
 export default function SettingsPage() {
   const { toast } = useToast()
-  const [settings, setSettings] = useState({
-    platformName: "Blasira",
-    platformEmail: "admin@blasira.ml",
-    platformPhone: "+223 XX XX XX XX",
-    supportEmail: "support@blasira.ml",
-    maxPassengersPerTrip: "4",
-    minTripPrice: "500",
-    maxTripPrice: "50000",
-    commissionRate: "10",
-    currency: "FCFA",
-    autoApproveTrips: false,
-    requireEmailVerification: true,
-    requirePhoneVerification: true,
-    requirePhotoVerification: true,
-    allowStudentOnly: false,
-    enableReviews: true,
-    enableChat: true,
-    notifyNewUsers: true,
-    notifyNewTrips: true,
-    notifyIncidents: true,
-    notifyReports: true,
-    emailNotifications: true,
-    smsNotifications: false,
-    pushNotifications: true,
-    maintenanceMode: false,
-    backupFrequency: "daily",
-    dataRetention: "365",
-    timezone: "Africa/Bamako",
-    language: "fr",
-  })
+  const [settings, setSettings] = useState<AppConfig>(initialSettings)
+  const [originalSettings, setOriginalSettings] = useState<AppConfig>(initialSettings)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  const appConfigService = React.useMemo(() => new AppConfigService(), [])
 
-  const handleSave = () => {
-    toast({
-      title: "Paramètres sauvegardés",
-      description: "Vos modifications ont été enregistrées avec succès.",
-    })
+  const loadSettings = React.useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const data = await appConfigService.getSettings()
+      setSettings(data)
+      setOriginalSettings(data) // Keep a copy for reset functionality
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Erreur de chargement",
+        description: "Impossible de charger les paramètres. Les valeurs par défaut sont affichées.",
+      })
+      setError("Impossible de charger les paramètres.")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [appConfigService, toast])
+
+  useEffect(() => {
+    loadSettings()
+  }, [loadSettings])
+
+  const handleSave = async () => {
+    try {
+      const updatedSettings = await appConfigService.updateSettings(settings)
+      setSettings(updatedSettings)
+      setOriginalSettings(updatedSettings)
+      toast({
+        title: "Paramètres sauvegardés",
+        description: "Vos modifications ont été enregistrées avec succès.",
+      })
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Erreur de sauvegarde",
+        description: err instanceof Error ? err.message : "Une erreur est survenue.",
+      })
+    }
   }
 
   const handleReset = () => {
+    setSettings(originalSettings);
     toast({
-      title: "Paramètres réinitialisés",
-      description: "Les paramètres ont été restaurés aux valeurs par défaut.",
-      variant: "destructive",
+      title: "Modifications annulées",
+      description: "Les paramètres ont été restaurés à leur dernière version sauvegardée.",
     })
+  }
+  
+  const handleSettingsChange = (section: keyof AppConfig, key: any, value: any) => {
+    setSettings(prev => ({
+      ...prev,
+      [section]: {
+        ...prev[section],
+        [key]: value
+      }
+    }));
+  };
+  
+  const handleAdminNotificationsChange = (key: keyof AppConfig['notifications']['admin'], value: boolean) => {
+    setSettings(prev => ({
+      ...prev,
+      notifications: {
+        ...prev.notifications,
+        admin: {
+          ...prev.notifications.admin,
+          [key]: value
+        }
+      }
+    }));
+  }
+
+  const handleChannelNotificationsChange = (key: keyof AppConfig['notifications']['channels'], value: boolean) => {
+    setSettings(prev => ({
+      ...prev,
+      notifications: {
+        ...prev.notifications,
+        channels: {
+          ...prev.notifications.channels,
+          [key]: value
+        }
+      }
+    }));
+  }
+
+
+  if (isLoading) {
+    return (
+      <div className="flex h-[80vh] items-center justify-center">
+        <Spinner className="mr-2" />
+        <span className="text-muted-foreground">Chargement des paramètres...</span>
+      </div>
+    )
   }
 
   return (
@@ -95,566 +167,96 @@ export default function SettingsPage() {
 
       <Tabs defaultValue="general" className="space-y-4">
         <TabsList className="grid w-full grid-cols-2 lg:grid-cols-6">
-          <TabsTrigger value="general">
-            <Settings className="mr-2 h-4 w-4" />
-            Général
-          </TabsTrigger>
-          <TabsTrigger value="security">
-            <Shield className="mr-2 h-4 w-4" />
-            Sécurité
-          </TabsTrigger>
-          <TabsTrigger value="notifications">
-            <Bell className="mr-2 h-4 w-4" />
-            Notifications
-          </TabsTrigger>
-          <TabsTrigger value="users">
-            <Users className="mr-2 h-4 w-4" />
-            Utilisateurs
-          </TabsTrigger>
-          <TabsTrigger value="payments">
-            <DollarSign className="mr-2 h-4 w-4" />
-            Paiements
-          </TabsTrigger>
-          <TabsTrigger value="system">
-            <Database className="mr-2 h-4 w-4" />
-            Système
-          </TabsTrigger>
+          <TabsTrigger value="general">Général</TabsTrigger>
+          <TabsTrigger value="security">Sécurité</TabsTrigger>
+          <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          <TabsTrigger value="payments">Paiements</TabsTrigger>
+          <TabsTrigger value="system">Système</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Informations de la plateforme</CardTitle>
-              <CardDescription>Configurer les informations générales de Blasira</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="platformName">Nom de la plateforme</Label>
-                  <Input
-                    id="platformName"
-                    value={settings.platformName}
-                    onChange={(e) => setSettings({ ...settings, platformName: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="platformEmail">Email principal</Label>
-                  <Input
-                    id="platformEmail"
-                    type="email"
-                    value={settings.platformEmail}
-                    onChange={(e) => setSettings({ ...settings, platformEmail: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="platformPhone">Téléphone</Label>
-                  <Input
-                    id="platformPhone"
-                    value={settings.platformPhone}
-                    onChange={(e) => setSettings({ ...settings, platformPhone: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="supportEmail">Email du support</Label>
-                  <Input
-                    id="supportEmail"
-                    type="email"
-                    value={settings.supportEmail}
-                    onChange={(e) => setSettings({ ...settings, supportEmail: e.target.value })}
-                  />
-                </div>
+                <div className="space-y-2"><Label>Nom de la plateforme</Label><Input value={settings.general.platformName} onChange={e => handleSettingsChange('general', 'platformName', e.target.value)} /></div>
+                <div className="space-y-2"><Label>Email principal</Label><Input type="email" value={settings.general.platformEmail} onChange={e => handleSettingsChange('general', 'platformEmail', e.target.value)} /></div>
+                <div className="space-y-2"><Label>Téléphone</Label><Input value={settings.general.platformPhone} onChange={e => handleSettingsChange('general', 'platformPhone', e.target.value)} /></div>
+                <div className="space-y-2"><Label>Email du support</Label><Input type="email" value={settings.general.supportEmail} onChange={e => handleSettingsChange('general', 'supportEmail', e.target.value)} /></div>
               </div>
             </CardContent>
           </Card>
-
           <Card>
-            <CardHeader>
-              <CardTitle>Paramètres des trajets</CardTitle>
-              <CardDescription>Configurer les règles pour les trajets et réservations</CardDescription>
-            </CardHeader>
+            <CardHeader><CardTitle>Paramètres des trajets</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="maxPassengers">Passagers max par trajet</Label>
-                  <Input
-                    id="maxPassengers"
-                    type="number"
-                    value={settings.maxPassengersPerTrip}
-                    onChange={(e) => setSettings({ ...settings, maxPassengersPerTrip: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="minPrice">Prix minimum (FCFA)</Label>
-                  <Input
-                    id="minPrice"
-                    type="number"
-                    value={settings.minTripPrice}
-                    onChange={(e) => setSettings({ ...settings, minTripPrice: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="maxPrice">Prix maximum (FCFA)</Label>
-                  <Input
-                    id="maxPrice"
-                    type="number"
-                    value={settings.maxTripPrice}
-                    onChange={(e) => setSettings({ ...settings, maxTripPrice: e.target.value })}
-                  />
-                </div>
+                <div className="space-y-2"><Label>Passagers max</Label><Input type="number" value={settings.trips.maxPassengersPerTrip} onChange={e => handleSettingsChange('trips', 'maxPassengersPerTrip', parseInt(e.target.value))} /></div>
+                <div className="space-y-2"><Label>Prix minimum</Label><Input type="number" value={settings.trips.minTripPrice} onChange={e => handleSettingsChange('trips', 'minTripPrice', parseInt(e.target.value))} /></div>
+                <div className="space-y-2"><Label>Prix maximum</Label><Input type="number" value={settings.trips.maxTripPrice} onChange={e => handleSettingsChange('trips', 'maxTripPrice', parseInt(e.target.value))} /></div>
               </div>
-
               <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Approbation automatique des trajets</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Les trajets sont publiés immédiatement sans validation manuelle
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.autoApproveTrips}
-                  onCheckedChange={(checked) => setSettings({ ...settings, autoApproveTrips: checked })}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Activer les avis et notations</Label>
-                  <p className="text-sm text-muted-foreground">Permet aux utilisateurs de noter leurs expériences</p>
-                </div>
-                <Switch
-                  checked={settings.enableReviews}
-                  onCheckedChange={(checked) => setSettings({ ...settings, enableReviews: checked })}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Activer le chat en temps réel</Label>
-                  <p className="text-sm text-muted-foreground">Discussion entre conducteurs et passagers</p>
-                </div>
-                <Switch
-                  checked={settings.enableChat}
-                  onCheckedChange={(checked) => setSettings({ ...settings, enableChat: checked })}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Localisation et langue</CardTitle>
-              <CardDescription>Configurer les paramètres régionaux</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="timezone">Fuseau horaire</Label>
-                  <Select
-                    value={settings.timezone}
-                    onValueChange={(value) => setSettings({ ...settings, timezone: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Africa/Bamako">Africa/Bamako (GMT+0)</SelectItem>
-                      <SelectItem value="Africa/Dakar">Africa/Dakar (GMT+0)</SelectItem>
-                      <SelectItem value="Africa/Abidjan">Africa/Abidjan (GMT+0)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="language">Langue par défaut</Label>
-                  <Select
-                    value={settings.language}
-                    onValueChange={(value) => setSettings({ ...settings, language: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="fr">Français</SelectItem>
-                      <SelectItem value="en">English</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              <div className="flex items-center justify-between"><Label>Approbation auto</Label><Switch checked={settings.trips.autoApproveTrips} onCheckedChange={c => handleSettingsChange('trips', 'autoApproveTrips', c)} /></div>
+              <div className="flex items-center justify-between"><Label>Activer les avis</Label><Switch checked={settings.features.enableReviews} onCheckedChange={c => handleSettingsChange('features', 'enableReviews', c)} /></div>
+              <div className="flex items-center justify-between"><Label>Activer le chat</Label><Switch checked={settings.features.enableChat} onCheckedChange={c => handleSettingsChange('features', 'enableChat', c)} /></div>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="security" className="space-y-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Vérification des utilisateurs</CardTitle>
-              <CardDescription>Configurer les exigences de vérification pour les nouveaux utilisateurs</CardDescription>
-            </CardHeader>
+            <CardHeader><CardTitle>Vérification des utilisateurs</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <Label>Vérification email obligatoire</Label>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Les utilisateurs doivent confirmer leur adresse email</p>
-                </div>
-                <Switch
-                  checked={settings.requireEmailVerification}
-                  onCheckedChange={(checked) => setSettings({ ...settings, requireEmailVerification: checked })}
-                />
-              </div>
-
+              <div className="flex items-center justify-between"><Label>Vérification email</Label><Switch checked={settings.security.requireEmailVerification} onCheckedChange={c => handleSettingsChange('security', 'requireEmailVerification', c)} /></div>
               <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-4 w-4 text-muted-foreground" />
-                    <Label>Vérification téléphone obligatoire</Label>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Vérifier le numéro de téléphone via SMS</p>
-                </div>
-                <Switch
-                  checked={settings.requirePhoneVerification}
-                  onCheckedChange={(checked) => setSettings({ ...settings, requirePhoneVerification: checked })}
-                />
-              </div>
-
+              <div className="flex items-center justify-between"><Label>Vérification téléphone</Label><Switch checked={settings.security.requirePhoneVerification} onCheckedChange={c => handleSettingsChange('security', 'requirePhoneVerification', c)} /></div>
               <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <Eye className="h-4 w-4 text-muted-foreground" />
-                    <Label>Vérification photo obligatoire</Label>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Les utilisateurs doivent soumettre une photo d'identité
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.requirePhotoVerification}
-                  onCheckedChange={(checked) => setSettings({ ...settings, requirePhotoVerification: checked })}
-                />
-              </div>
-
-              <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-muted-foreground" />
-                    <Label>Réservé aux étudiants uniquement</Label>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Restreindre l'accès aux étudiants avec email institutionnel
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.allowStudentOnly}
-                  onCheckedChange={(checked) => setSettings({ ...settings, allowStudentOnly: checked })}
-                />
-              </div>
+              <div className="flex items-center justify-between"><Label>Vérification photo</Label><Switch checked={settings.security.requirePhotoVerification} onCheckedChange={c => handleSettingsChange('security', 'requirePhotoVerification', c)} /></div>
+               <Separator />
+              <div className="flex items-center justify-between"><Label>Réservé aux étudiants</Label><Switch checked={settings.security.allowStudentOnly} onCheckedChange={c => handleSettingsChange('security', 'allowStudentOnly', c)} /></div>
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Sécurité et confidentialité</CardTitle>
-              <CardDescription>Paramètres avancés de sécurité</CardDescription>
-            </CardHeader>
+           <Card>
+            <CardHeader><CardTitle>Sécurité et confidentialité</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="rounded-lg border border-accent bg-accent/10 p-4">
-                <div className="flex items-start gap-3">
-                  <CheckCircle className="h-5 w-5 text-accent mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="font-medium">Charte de confiance activée</p>
-                    <p className="text-sm text-muted-foreground">
-                      Tous les nouveaux utilisateurs doivent accepter la charte lors de l'inscription
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="dataRetention">Durée de conservation des données (jours)</Label>
-                <Input
-                  id="dataRetention"
-                  type="number"
-                  value={settings.dataRetention}
-                  onChange={(e) => setSettings({ ...settings, dataRetention: e.target.value })}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Les données des comptes supprimés seront conservées pendant cette période
-                </p>
-              </div>
+              <div className="space-y-2"><Label>Rétention des données (jours)</Label><Input type="number" value={settings.security.dataRetentionDays} onChange={e => handleSettingsChange('security', 'dataRetentionDays', parseInt(e.target.value))} /></div>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="notifications" className="space-y-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Notifications administrateur</CardTitle>
-              <CardDescription>Configurer les alertes pour les administrateurs</CardDescription>
-            </CardHeader>
+            <CardHeader><CardTitle>Notifications administrateur</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Nouveaux utilisateurs</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Recevoir une notification pour chaque nouvelle inscription
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.notifyNewUsers}
-                  onCheckedChange={(checked) => setSettings({ ...settings, notifyNewUsers: checked })}
-                />
-              </div>
-
+              <div className="flex items-center justify-between"><Label>Nouveaux utilisateurs</Label><Switch checked={settings.notifications.admin.notifyNewUsers} onCheckedChange={c => handleAdminNotificationsChange('notifyNewUsers', c)} /></div>
               <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Nouveaux trajets</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Recevoir une notification pour chaque nouveau trajet publié
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.notifyNewTrips}
-                  onCheckedChange={(checked) => setSettings({ ...settings, notifyNewTrips: checked })}
-                />
-              </div>
-
+              <div className="flex items-center justify-between"><Label>Nouveaux trajets</Label><Switch checked={settings.notifications.admin.notifyNewTrips} onCheckedChange={c => handleAdminNotificationsChange('notifyNewTrips', c)} /></div>
               <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Incidents signalés</Label>
-                  <p className="text-sm text-muted-foreground">Recevoir une alerte immédiate pour les incidents</p>
-                </div>
-                <Switch
-                  checked={settings.notifyIncidents}
-                  onCheckedChange={(checked) => setSettings({ ...settings, notifyIncidents: checked })}
-                />
-              </div>
-
-              <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Signalements de comportement</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Recevoir une notification pour les signalements d'utilisateurs
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.notifyReports}
-                  onCheckedChange={(checked) => setSettings({ ...settings, notifyReports: checked })}
-                />
-              </div>
+              <div className="flex items-center justify-between"><Label>Incidents signalés</Label><Switch checked={settings.notifications.admin.notifyIncidents} onCheckedChange={c => handleAdminNotificationsChange('notifyIncidents', c)} /></div>
+               <Separator />
+              <div className="flex items-center justify-between"><Label>Signalements</Label><Switch checked={settings.notifications.admin.notifyReports} onCheckedChange={c => handleAdminNotificationsChange('notifyReports', c)} /></div>
             </CardContent>
           </Card>
-
           <Card>
-            <CardHeader>
-              <CardTitle>Canaux de notification</CardTitle>
-              <CardDescription>Choisir les canaux pour recevoir les notifications</CardDescription>
-            </CardHeader>
+            <CardHeader><CardTitle>Canaux de notification</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <Label>Notifications par email</Label>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Envoyer les notifications à {settings.platformEmail}</p>
-                </div>
-                <Switch
-                  checked={settings.emailNotifications}
-                  onCheckedChange={(checked) => setSettings({ ...settings, emailNotifications: checked })}
-                />
-              </div>
-
-              <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <Bell className="h-4 w-4 text-muted-foreground" />
-                    <Label>Notifications SMS</Label>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Envoyer les alertes critiques par SMS</p>
-                </div>
-                <Switch
-                  checked={settings.smsNotifications}
-                  onCheckedChange={(checked) => setSettings({ ...settings, smsNotifications: checked })}
-                />
-              </div>
-
-              <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <Bell className="h-4 w-4 text-muted-foreground" />
-                    <Label>Notifications push</Label>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Notifications dans le navigateur et l'application</p>
-                </div>
-                <Switch
-                  checked={settings.pushNotifications}
-                  onCheckedChange={(checked) => setSettings({ ...settings, pushNotifications: checked })}
-                />
-              </div>
+                <div className="flex items-center justify-between"><Label>Par email</Label><Switch checked={settings.notifications.channels.emailNotifications} onCheckedChange={c => handleChannelNotificationsChange('emailNotifications', c)} /></div>
+                <Separator />
+                <div className="flex items-center justify-between"><Label>Par SMS</Label><Switch checked={settings.notifications.channels.smsNotifications} onCheckedChange={c => handleChannelNotificationsChange('smsNotifications', c)} /></div>
+                <Separator />
+                <div className="flex items-center justify-between"><Label>Notifications push</Label><Switch checked={settings.notifications.channels.pushNotifications} onCheckedChange={c => handleChannelNotificationsChange('pushNotifications', c)} /></div>
             </CardContent>
           </Card>
         </TabsContent>
-
-        <TabsContent value="users" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Gestion des utilisateurs</CardTitle>
-              <CardDescription>Paramètres liés aux comptes utilisateurs</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-lg bg-muted p-4 space-y-2">
-                <div className="flex items-center gap-2">
-                  <Users className="h-5 w-5 text-primary" />
-                  <h4 className="font-semibold">Badges et certifications</h4>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Les utilisateurs peuvent obtenir les badges suivants après vérification :
-                </p>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  <Badge variant="secondary" className="bg-primary/10 text-primary">
-                    Étudiant vérifié
-                  </Badge>
-                  <Badge variant="secondary" className="bg-accent/10 text-accent">
-                    Conducteur confirmé
-                  </Badge>
-                  <Badge variant="secondary" className="bg-chart-3/10 text-chart-3">
-                    Membre de confiance
-                  </Badge>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <Label>Critères pour le badge "Conducteur confirmé"</Label>
-                <Textarea
-                  placeholder="Ex: Minimum 10 trajets effectués avec une note moyenne de 4.5/5"
-                  className="min-h-[100px]"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Critères pour le badge "Membre de confiance"</Label>
-                <Textarea
-                  placeholder="Ex: Compte actif depuis 6 mois, aucun signalement, vérification complète"
-                  className="min-h-[100px]"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Support utilisateur</CardTitle>
-              <CardDescription>Configuration du système de support intégré</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-lg border border-accent bg-accent/10 p-4">
-                <div className="flex items-start gap-3">
-                  <CheckCircle className="h-5 w-5 text-accent mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="font-medium">Support intégré activé</p>
-                    <p className="text-sm text-muted-foreground">
-                      Chat en direct et formulaire de contact disponibles pour tous les utilisateurs
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="supportResponse">Temps de réponse moyen souhaité</Label>
-                <Select defaultValue="24h">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1h">Moins d'1 heure</SelectItem>
-                    <SelectItem value="6h">Moins de 6 heures</SelectItem>
-                    <SelectItem value="24h">Moins de 24 heures</SelectItem>
-                    <SelectItem value="48h">Moins de 48 heures</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
+        
         <TabsContent value="payments" className="space-y-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Configuration des paiements</CardTitle>
-              <CardDescription>Gérer les tarifs et commissions</CardDescription>
-            </CardHeader>
+            <CardHeader><CardTitle>Configuration des paiements</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="commission">Taux de commission (%)</Label>
-                  <Input
-                    id="commission"
-                    type="number"
-                    value={settings.commissionRate}
-                    onChange={(e) => setSettings({ ...settings, commissionRate: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">Commission prélevée sur chaque trajet</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="currency">Devise</Label>
-                  <Select
-                    value={settings.currency}
-                    onValueChange={(value) => setSettings({ ...settings, currency: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="FCFA">FCFA (Franc CFA)</SelectItem>
-                      <SelectItem value="EUR">EUR (Euro)</SelectItem>
-                      <SelectItem value="USD">USD (Dollar US)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="rounded-lg bg-muted p-4 space-y-2">
-                <h4 className="font-semibold flex items-center gap-2">
-                  <DollarSign className="h-4 w-4" />
-                  Modes de paiement disponibles
-                </h4>
-                <div className="grid gap-2 md:grid-cols-3">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-accent" />
-                    <span className="text-sm">Espèces</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-accent" />
-                    <span className="text-sm">Mobile Money</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-accent" />
-                    <span className="text-sm">Carte bancaire</span>
-                  </div>
-                </div>
+                <div className="space-y-2"><Label>Taux de commission (%)</Label><Input type="number" value={settings.payments.commissionRate} onChange={e => handleSettingsChange('payments', 'commissionRate', parseInt(e.target.value))} /></div>
+                <div className="space-y-2"><Label>Devise</Label><Input value={settings.payments.currency} onChange={e => handleSettingsChange('payments', 'currency', e.target.value)} /></div>
               </div>
             </CardContent>
           </Card>
@@ -662,89 +264,11 @@ export default function SettingsPage() {
 
         <TabsContent value="system" className="space-y-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Maintenance et sauvegarde</CardTitle>
-              <CardDescription>Configuration système et maintenance</CardDescription>
-            </CardHeader>
+            <CardHeader><CardTitle>Maintenance et sauvegarde</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg border border-destructive bg-destructive/10 p-4">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-destructive" />
-                    <Label>Mode maintenance</Label>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Désactiver temporairement l'accès à la plateforme</p>
-                </div>
-                <Switch
-                  checked={settings.maintenanceMode}
-                  onCheckedChange={(checked) => setSettings({ ...settings, maintenanceMode: checked })}
-                />
-              </div>
-
+              <div className="flex items-center justify-between"><Label>Mode maintenance</Label><Switch checked={settings.system.maintenanceMode} onCheckedChange={c => handleSettingsChange('system', 'maintenanceMode', c)} /></div>
               <Separator />
-
-              <div className="space-y-2">
-                <Label htmlFor="backupFrequency">Fréquence de sauvegarde</Label>
-                <Select
-                  value={settings.backupFrequency}
-                  onValueChange={(value) => setSettings({ ...settings, backupFrequency: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="hourly">Toutes les heures</SelectItem>
-                    <SelectItem value="daily">Quotidienne</SelectItem>
-                    <SelectItem value="weekly">Hebdomadaire</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="rounded-lg bg-muted p-4 space-y-2">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <h4 className="font-semibold">Dernière sauvegarde</h4>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {new Date().toLocaleString("fr-FR", {
-                    dateStyle: "full",
-                    timeStyle: "short",
-                  })}
-                </p>
-                <Button variant="outline" size="sm">
-                  Lancer une sauvegarde manuelle
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Informations système</CardTitle>
-              <CardDescription>État actuel de la plateforme</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Version de la plateforme</p>
-                  <p className="font-mono text-sm font-semibold">v1.2.0</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Environnement</p>
-                  <Badge variant="secondary">Production</Badge>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Base de données</p>
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-accent" />
-                    <span className="text-sm font-semibold">Opérationnelle</span>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Stockage utilisé</p>
-                  <p className="font-mono text-sm font-semibold">2.4 GB / 10 GB</p>
-                </div>
-              </div>
+              <div className="space-y-2"><Label>Fréquence de sauvegarde</Label><Input value={settings.system.backupFrequency} onChange={e => handleSettingsChange('system', 'backupFrequency', e.target.value)} /></div>
             </CardContent>
           </Card>
         </TabsContent>

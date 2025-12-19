@@ -1,5 +1,5 @@
 export interface LoginRequest {
-  email: string;
+  phoneNumber: string;
   password: string;
 }
 
@@ -7,10 +7,25 @@ export interface LoginResponse {
   token: string;
 }
 
+export interface SignupRequest {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  phoneNumber: string;
+  acceptedTrustCharter: boolean;
+}
+
+export interface SignupResponse {
+	// Selon ce que le backend retourne, par ex: un message de succès ou l'utilisateur créé
+	message: string;
+}
+
+
 export class AuthService {
   private baseUrl: string;
 
-  constructor(baseUrl: string = 'http://localhost:8080/api') {
+  constructor(baseUrl: string = '/api') {
     this.baseUrl = baseUrl;
   }
 
@@ -32,6 +47,32 @@ export class AuthService {
       );
       
       // Ajouter des informations supplémentaires pour une meilleure gestion
+      (error as any).status = response.status;
+      (error as any).errorData = errorData;
+      
+      throw error;
+    }
+
+    return response.json();
+  }
+
+  async signup(userData: SignupRequest): Promise<SignupResponse> {
+    const response = await fetch(`${this.baseUrl}/auth/signup`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(userData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const error = new Error(
+        errorData.message || 
+        errorData.error || 
+        `Échec de l'inscription: ${response.status} ${response.statusText}`
+      );
+      
       (error as any).status = response.status;
       (error as any).errorData = errorData;
       

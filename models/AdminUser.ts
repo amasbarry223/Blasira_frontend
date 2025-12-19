@@ -4,6 +4,8 @@ export interface AdminUser {
   firstName: string;
   lastName: string;
   roles: string[];
+  note: number;
+  nombreDeTrajet: number;
 }
 
 export interface AdminUserResponse {

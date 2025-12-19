@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
-import { EyeIcon, EyeOffIcon, LogInIcon, MailIcon, LockIcon, AlertCircle, XCircle } from 'lucide-react'
+import { EyeIcon, EyeOffIcon, LogInIcon, PhoneIcon, LockIcon, AlertCircle, XCircle } from 'lucide-react'
 import Image from 'next/image'
 import { toast } from 'sonner'
 import logo from '@/assets/logo.png'
@@ -30,14 +30,14 @@ import { saveToken } from '@/lib/auth'
 
 
 const schema = z.object({
-	email: z.string().min(1, 'Email requis').email("Email invalide"),
+	phone: z.string().min(1, 'Numéro de téléphone requis'),
 	password: z.string().min(1, 'Mot de passe requis'),
 	remember: z.boolean().optional().default(false),
 })
 
 type FormValues = z.infer<typeof schema>
 
-type ErrorType = 'email' | 'password' | 'general' | null
+type ErrorType = 'phone' | 'password' | 'general' | null
 
 export function LoginForm({ className }: { className?: string }) {
 	const router = useRouter()
@@ -51,7 +51,7 @@ export function LoginForm({ className }: { className?: string }) {
 		mode: 'onTouched',
 		resolver: zodResolver(schema),
 		defaultValues: {
-			email: '',
+			phone: '',
 			password: '',
 			remember: false,
 		},
@@ -76,17 +76,18 @@ export function LoginForm({ className }: { className?: string }) {
 			message.includes('bad credentials') ||
 			message.includes('invalid credentials')
 		) {
-			// Vérifier si le message indique spécifiquement l'email ou le mot de passe
+			// Vérifier si le message indique spécifiquement le téléphone ou le mot de passe
 			if (
-				message.includes('email') ||
+				message.includes('phone') ||
+				message.includes('téléphone') ||
 				message.includes('utilisateur') ||
 				message.includes('user') ||
 				message.includes('compte') ||
-				errorData.field === 'email'
+				errorData.field === 'phone'
 			) {
 				return {
-					type: 'email',
-					message: "L'adresse e-mail est incorrecte ou n'existe pas",
+					type: 'phone',
+					message: "Le numéro de téléphone est incorrect ou n'existe pas",
 				}
 			}
 
@@ -105,7 +106,7 @@ export function LoginForm({ className }: { className?: string }) {
 			// Par défaut, si c'est une erreur 401, on considère que c'est les identifiants
 			return {
 				type: 'general',
-				message: "L'adresse e-mail ou le mot de passe est incorrect",
+				message: "Le numéro de téléphone ou le mot de passe est incorrect",
 			}
 		}
 
@@ -150,12 +151,12 @@ export function LoginForm({ className }: { className?: string }) {
 		setErrorMessage(null)
 
 		// Réinitialiser les erreurs des champs
-		form.clearErrors('email')
+		form.clearErrors('phone')
 		form.clearErrors('password')
 
 		try {
 			const response = await authService.login({
-				email: values.email,
+				phoneNumber: values.phone,
 				password: values.password,
 			})
 
@@ -226,18 +227,18 @@ export function LoginForm({ className }: { className?: string }) {
 						)}
 
 						<FormField
-							name="email"
+							name="phone"
 							control={form.control}
 							render={({ field }) => {
-								const hasError = form.formState.errors.email || errorType === 'email'
+								const hasError = form.formState.errors.phone || errorType === 'phone'
 								return (
 								<FormItem>
-									<FormLabel className="text-primary">Adresse e-mail</FormLabel>
+									<FormLabel className="text-primary">Numéro de téléphone</FormLabel>
 									<FormControl>
 										<div className="grid gap-2">
-											<Label htmlFor="email" className="sr-only">Email</Label>
+											<Label htmlFor="phone" className="sr-only">Numéro de téléphone</Label>
 											<div className="relative">
-													<MailIcon
+													<PhoneIcon
 														className={cn(
 															'absolute left-3 top-1/2 -translate-y-1/2 transition-colors',
 															hasError ? 'text-destructive' : 'text-muted-foreground'
@@ -252,11 +253,11 @@ export function LoginForm({ className }: { className?: string }) {
 														)}
 													>
 													<input
-														id="email"
-														placeholder="vous@exemple.com"
-														type="email"
-														autoComplete="email"
-														inputMode="email"
+														id="phone"
+														placeholder="+223 XX XX XX XX"
+														type="tel"
+														autoComplete="tel"
+														inputMode="tel"
 															className={cn(
 																'h-11 w-full bg-transparent outline-none focus-visible:outline-none ring-0 focus:ring-0 border-0 pl-11 pr-3 text-base md:text-sm transition-colors',
 																hasError && 'text-destructive placeholder:text-destructive/50'
@@ -265,10 +266,10 @@ export function LoginForm({ className }: { className?: string }) {
 															onChange={(e) => {
 																field.onChange(e)
 																// Effacer l'erreur quand l'utilisateur commence à taper
-																if (errorType === 'email') {
+																if (errorType === 'phone') {
 																	setErrorType(null)
 																	setErrorMessage(null)
-																	form.clearErrors('email')
+																	form.clearErrors('phone')
 																}
 															}}
 													/>

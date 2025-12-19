@@ -4,6 +4,7 @@ export * from './AdminUser';
 export * from './AppConfig';
 export * from './Booking';
 export * from './Conversation';
+export * from './DashboardStats';
 export * from './Document';
 export * from './DriverProfile';
 export * from './IncidentReport';
@@ -17,4 +18,5 @@ export * from './UserAccount';
 export * from './UserProfile';
 export * from './UserRole';
 export * from './Vehicle';
-
+export * from './VerificationRequest';
+export * from './Support';

@@ -1,9 +1,10 @@
-import { Message, CreateMessageDto, UpdateMessageDto } from '../models';
+import { Message, SendMessageRequest, UpdateMessageDto } from '../models';
+import { getAuthHeaders } from '../lib/auth';
 
 export class MessageService {
   private baseUrl: string;
 
-  constructor(baseUrl: string = '/api') {
+  constructor(baseUrl: string = 'http://localhost:8080/api') {
     this.baseUrl = baseUrl;
   }
 
@@ -39,18 +40,37 @@ export class MessageService {
     return response.json();
   }
 
-  async create(data: CreateMessageDto): Promise<Message> {
+  async sendMessage(data: SendMessageRequest): Promise<Message> {
     const response = await fetch(`${this.baseUrl}/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
       body: JSON.stringify(data),
     });
     if (!response.ok) {
-      throw new Error('Failed to create message');
+      // Try to parse error response
+      const errorData = await response.json().catch(() => ({ message: 'Failed to send message' }));
+      throw new Error(errorData.message || `Failed to send message: ${response.status}`);
     }
     return response.json();
+  }
+
+  async sendAdminBroadcastMessage(data: AdminBroadcastMessageRequest): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/admin/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: 'Failed to send broadcast message' }));
+      throw new Error(errorData.message || `Failed to send broadcast message: ${response.status}`);
+    }
+    // Assuming no return body needed for a broadcast
   }
 
   async update(id: number, data: UpdateMessageDto): Promise<Message> {
@@ -58,6 +78,7 @@ export class MessageService {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
       body: JSON.stringify(data),
     });

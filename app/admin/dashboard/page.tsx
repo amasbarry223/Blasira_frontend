@@ -1,43 +1,91 @@
 "use client"
 
+import React, { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Users, Car, Calendar, AlertTriangle, TrendingUp, TrendingDown } from "lucide-react"
+import { Users, Car, Calendar, AlertTriangle, TrendingUp, TrendingDown, Activity, User, BookUser } from "lucide-react"
 import { Line, LineChart, Bar, BarChart, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Legend } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-
-const statsData = [
-  { title: "Utilisateurs Actifs", value: "2,345", change: "+12.5%", trend: "up", icon: Users, color: "text-primary" },
-  { title: "Trajets du Jour", value: "156", change: "+8.3%", trend: "up", icon: Car, color: "text-accent" },
-  { title: "Réservations", value: "892", change: "+23.1%", trend: "up", icon: Calendar, color: "text-chart-3" },
-  {
-    title: "Incidents Actifs",
-    value: "12",
-    change: "-5.2%",
-    trend: "down",
-    icon: AlertTriangle,
-    color: "text-destructive",
-  },
-]
-
-const chartData = [
-  { month: "Jan", trajets: 186, reservations: 305, utilisateurs: 412 },
-  { month: "Fév", trajets: 205, reservations: 378, utilisateurs: 456 },
-  { month: "Mar", trajets: 237, reservations: 445, utilisateurs: 501 },
-  { month: "Avr", trajets: 273, reservations: 512, utilisateurs: 578 },
-  { month: "Mai", trajets: 209, reservations: 389, utilisateurs: 623 },
-  { month: "Juin", trajets: 314, reservations: 598, utilisateurs: 701 },
-]
-
-const dailyActivityData = [
-  { heure: "00h", activite: 12 },
-  { heure: "04h", activite: 8 },
-  { heure: "08h", activite: 145 },
-  { heure: "12h", activite: 203 },
-  { heure: "16h", activite: 187 },
-  { heure: "20h", activite: 98 },
-]
+import { AdminService } from "@/services/AdminService"
+import { DashboardStats } from "@/models"
+import { Spinner } from "@/components/ui/spinner"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const adminService = new AdminService()
+        const data = await adminService.getDashboardStats()
+        setStats(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Une erreur est survenue.")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchStats()
+  }, [])
+
+  if (isLoading) {
+    return (
+      <div className="flex h-[80vh] items-center justify-center">
+        <Spinner className="mr-2" />
+        <span className="text-muted-foreground">Chargement du tableau de bord...</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-[80vh] items-center justify-center">
+        <Alert variant="destructive" className="w-auto max-w-lg">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Erreur</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
+
+  if (!stats) {
+    return (
+      <div className="flex h-[80vh] items-center justify-center">
+        <Alert className="w-auto max-w-lg">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Aucune donnée</AlertTitle>
+          <AlertDescription>Impossible de charger les statistiques du tableau de bord.</AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
+  
+  const statsData = [
+    { title: "Utilisateurs Totals", value: stats.totalUsers, icon: Users, color: "text-primary" },
+    { title: "Trajets Totals", value: stats.totalTrips, icon: Car, color: "text-accent" },
+    { title: "Réservations Totales", value: stats.totalBookings, icon: Calendar, color: "text-chart-3" },
+    // You might want to add totalIncidents to your API if needed
+    { title: "Incidents Actifs", value: "N/A", icon: AlertTriangle, color: "text-destructive" },
+  ]
+  
+  const monthlyChartData = Object.entries(stats.monthlyTrends).map(([month, data]) => ({
+    month: new Date(month).toLocaleString('fr-FR', { month: 'short' }),
+    utilisateurs: data.newUsers,
+    trajets: data.newTrips,
+    reservations: data.newBookings,
+  }));
+
+  const dailyChartData = Object.entries(stats.dailyActivity).map(([date, count]) => ({
+    date: new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }),
+    activite: count,
+  }));
+
   return (
     <div className="space-y-6">
       <div>
@@ -54,12 +102,8 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stat.value}</div>
-              <p
-                className={`text-xs flex items-center gap-1 ${stat.trend === "up" ? "text-accent" : "text-destructive"}`}
-              >
-                {stat.trend === "up" ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                {stat.change} par rapport au mois dernier
-              </p>
+              {/* Change/trend data is not available in the current API response */}
+              <p className="text-xs text-muted-foreground">Donnée en temps réel</p>
             </CardContent>
           </Card>
         ))}
@@ -74,23 +118,14 @@ export default function DashboardPage() {
           <CardContent>
             <ChartContainer
               config={{
-                trajets: {
-                  label: "Trajets",
-                  color: "var(--chart-1)",
-                },
-                reservations: {
-                  label: "Réservations",
-                  color: "var(--chart-2)",
-                },
-                utilisateurs: {
-                  label: "Utilisateurs",
-                  color: "var(--chart-3)",
-                },
+                trajets: { label: "Trajets", color: "hsl(var(--chart-1))" },
+                reservations: { label: "Réservations", color: "hsl(var(--chart-2))" },
+                utilisateurs: { label: "Utilisateurs", color: "hsl(var(--chart-3))" },
               }}
               className="h-[300px]"
             >
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
+                <LineChart data={monthlyChartData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis dataKey="month" className="text-xs" />
                   <YAxis className="text-xs" />
@@ -107,23 +142,20 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Activité Quotidienne</CardTitle>
-            <CardDescription>Répartition de l'activité par tranche horaire</CardDescription>
+            <CardTitle>Activité sur 30 jours</CardTitle>
+            <CardDescription>Activité totale sur la plateforme par jour</CardDescription>
           </CardHeader>
           <CardContent>
             <ChartContainer
               config={{
-                activite: {
-                  label: "Activité",
-                  color: "var(--primary)",
-                },
+                activite: { label: "Activité", color: "hsl(var(--primary))" },
               }}
               className="h-[300px]"
             >
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dailyActivityData}>
+                <BarChart data={dailyChartData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="heure" className="text-xs" />
+                  <XAxis dataKey="date" className="text-xs" />
                   <YAxis className="text-xs" />
                   <ChartTooltip content={<ChartTooltipContent />} />
                   <Bar dataKey="activite" fill="var(--color-activite)" radius={[8, 8, 0, 0]} />
@@ -140,31 +172,25 @@ export default function DashboardPage() {
           <CardDescription>Dernières actions sur la plateforme</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {[
-              { action: "Nouvel utilisateur inscrit", user: "Amadou Diarra", time: "Il y a 5 min", type: "user" },
-              { action: "Trajet publié", user: "Fatoumata Keita", time: "Il y a 12 min", type: "trip" },
-              { action: "Incident signalé", user: "Ibrahim Koné", time: "Il y a 23 min", type: "incident" },
-              { action: "Vérification approuvée", user: "Mariam Touré", time: "Il y a 35 min", type: "verification" },
-              { action: "Réservation confirmée", user: "Seydou Traoré", time: "Il y a 1 h", type: "booking" },
-            ].map((activity, index) => (
+          <div className="space-y-4"> {/* Applied directly here */}
+            {stats.recentActivities.map((activity, index) => {
+               const getIcon = () => {
+                 if (activity.toLowerCase().includes("trajet")) return <Car className="h-4 w-4 text-accent" />;
+                 if (activity.toLowerCase().includes("utilisateur")) return <User className="h-4 w-4 text-primary" />;
+                 if (activity.toLowerCase().includes("réservation")) return <BookUser className="h-4 w-4 text-chart-3" />;
+                 return <Activity className="h-4 w-4 text-muted-foreground" />;
+               }
+
+              return (
               <div key={index} className="flex items-center gap-4">
-                <div
-                  className={`h-2 w-2 rounded-full ${
-                    activity.type === "incident"
-                      ? "bg-destructive"
-                      : activity.type === "trip"
-                        ? "bg-accent"
-                        : "bg-primary"
-                  }`}
-                />
-                <div className="flex-1 space-y-1">
-                  <p className="text-sm font-medium leading-none">{activity.action}</p>
-                  <p className="text-sm text-muted-foreground">{activity.user}</p>
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+                  {getIcon()}
                 </div>
-                <div className="text-xs text-muted-foreground">{activity.time}</div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium leading-none">{activity}</p>
+                </div>
               </div>
-            ))}
+            )})}
           </div>
         </CardContent>
       </Card>

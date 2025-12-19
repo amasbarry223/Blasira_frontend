@@ -1,63 +1,35 @@
-import { AppConfig, CreateAppConfigDto, UpdateAppConfigDto } from '../models';
+import { AppConfig } from '../models';
+import { getAuthHeaders } from '../lib/auth';
 
 export class AppConfigService {
   private baseUrl: string;
 
-  constructor(baseUrl: string = '/api') {
+  constructor(baseUrl: string = 'http://localhost:8080/api') {
     this.baseUrl = baseUrl;
   }
 
-  async getAll(): Promise<AppConfig[]> {
-    const response = await fetch(`${this.baseUrl}/app-config`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch app configs');
-    }
-    return response.json();
-  }
-
-  async getById(id: number): Promise<AppConfig> {
-    const response = await fetch(`${this.baseUrl}/app-config/${id}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch app config with id ${id}`);
-    }
-    return response.json();
-  }
-
-  async create(data: CreateAppConfigDto): Promise<AppConfig> {
-    const response = await fetch(`${this.baseUrl}/app-config`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
+  async getSettings(): Promise<AppConfig> {
+    const response = await fetch(`${this.baseUrl}/admin/settings`, {
+      headers: getAuthHeaders(),
     });
     if (!response.ok) {
-      throw new Error('Failed to create app config');
+      throw new Error('Failed to fetch settings');
     }
     return response.json();
   }
 
-  async update(id: number, data: UpdateAppConfigDto): Promise<AppConfig> {
-    const response = await fetch(`${this.baseUrl}/app-config/${id}`, {
+  async updateSettings(settings: AppConfig): Promise<AppConfig> {
+    const response = await fetch(`${this.baseUrl}/admin/settings`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify(settings),
     });
     if (!response.ok) {
-      throw new Error(`Failed to update app config with id ${id}`);
+      throw new Error('Failed to update settings');
     }
     return response.json();
   }
-
-  async delete(id: number): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/app-config/${id}`, {
-      method: 'DELETE',
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to delete app config with id ${id}`);
-    }
-  }
 }
-

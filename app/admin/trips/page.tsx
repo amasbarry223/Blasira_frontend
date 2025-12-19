@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
+import { useToast } from "@/components/ui/use-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -17,7 +18,6 @@ import {
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Search, Filter, Eye, CheckCircle, XCircle, MapPin, Calendar, Users, Car, X, ArrowUpDown } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import {
@@ -38,81 +38,42 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
+import { TripService } from "@/services/TripService"
+import { AdminTrip } from "@/models/AdminTrip"
+import { Skeleton } from "@/components/ui/skeleton"
+import { getToken } from '@/lib/auth';
 
-const mockTrips = [
-  {
-    id: 1,
-    driver: "Amadou Diallo",
-    from: "Bamako Centre",
-    to: "Université de Bamako",
-    date: "2024-12-15",
-    time: "08:00",
-    price: 1500,
-    seats: 3,
-    available: 1,
-    status: "pending",
-    vehicle: "Toyota Corolla",
-    type: "car",
-  },
-  {
-    id: 2,
-    driver: "Fatoumata Traoré",
-    from: "Hippodrome",
-    to: "ACI 2000",
-    date: "2024-12-15",
-    time: "14:30",
-    price: 1000,
-    seats: 2,
-    available: 2,
-    status: "active",
-    vehicle: "Honda Moto",
-    type: "moto",
-  },
-  {
-    id: 3,
-    driver: "Mamadou Keita",
-    from: "Lafiabougou",
-    to: "Point G",
-    date: "2024-12-16",
-    time: "07:00",
-    price: 1200,
-    seats: 4,
-    available: 0,
-    status: "completed",
-    vehicle: "Peugeot 307",
-    type: "car",
-  },
-  {
-    id: 4,
-    driver: "Ibrahim Coulibaly",
-    from: "Magnambougou",
-    to: "Sogoniko",
-    date: "2024-12-16",
-    time: "18:00",
-    price: 800,
-    seats: 1,
-    available: 1,
-    status: "cancelled",
-    vehicle: "Yamaha Moto",
-    type: "moto",
-  },
-]
+// Define the type for the trip data used within the component
+type DisplayTrip = {
+  id: number;
+  driver: string;
+  from: string;
+  to: string;
+  date: string;
+  time: string;
+  price: number;
+  seats: number;
+  available: number;
+  status: "pending" | "active" | "completed" | "cancelled";
+  vehicle: string;
+  type: "car" | "moto";
+};
 
 export default function TripsPage() {
   const { toast } = useToast()
+  
+  // State for data, loading, and error
+  const [trips, setTrips] = useState<DisplayTrip[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedTrip, setSelectedTrip] = useState<(typeof mockTrips)[0] | null>(null)
+  const [selectedTrip, setSelectedTrip] = useState<DisplayTrip | null>(null)
   const [filterStatus, setFilterStatus] = useState<string>("all")
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; description?: string; onConfirm: () => void }>({ open: false, title: "", description: "", onConfirm: () => {} })
   const [sort, setSort] = useState<{ key: "driver" | "date" | "price" | "status"; dir: "asc" | "desc" }>({ key: "driver", dir: "asc" })
-  const [density, setDensity] = useState<"spacious" | "compact">(() => (typeof window !== "undefined" ? (localStorage.getItem("trips:density") as "spacious" | "compact") || "spacious" : "spacious"))
-  const [visible, setVisible] = useState<{ route: boolean; datetime: boolean; type: boolean; seats: boolean; price: boolean; status: boolean; actions: boolean }>(() => {
-    if (typeof window === "undefined") {
-      return { route: true, datetime: true, type: true, seats: true, price: true, status: true, actions: true }
-    }
-    const raw = localStorage.getItem("trips:visible")
-    return raw ? JSON.parse(raw) : { route: true, datetime: true, type: true, seats: true, price: true, status: true, actions: true }
-  })
+  const [density, setDensity] = useState<"spacious" | "compact">("spacious")
+  const [visible, setVisible] = useState<{ route: boolean; datetime: boolean; type: boolean; seats: boolean; price: boolean; status: boolean; actions: boolean }>({ route: true, datetime: true, type: true, seats: true, price: true, status: true, actions: true })
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [newTrip, setNewTrip] = useState({
     driver: "",
@@ -124,8 +85,38 @@ export default function TripsPage() {
     seats: "",
     type: "car",
   })
+    
+  useEffect(() => {
+    const token = getToken(); // Get token here
+    const tripService = new TripService('/api', token); // Pass token to service
+    setLoading(true);
+    tripService.getAdminTrips()
+      .then(data => {
+        const transformedTrips: DisplayTrip[] = data.map(trip => ({
+          id: trip.id,
+          driver: trip.driverName,
+          from: trip.departureAddress,
+          to: trip.destinationAddress,
+          date: new Date(trip.departureTime).toISOString().split('T')[0],
+          time: new Date(trip.departureTime).toTimeString().split(' ')[0].substring(0, 5),
+          price: trip.pricePerSeat,
+          seats: trip.availableSeats, // Using availableSeats as total seats for now
+          available: trip.availableSeats,
+          status: "pending", // Default status, as it's not in the API response
+          vehicle: trip.vehicleModel,
+          type: "car", // Default type
+        }));
+        setTrips(transformedTrips);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Failed to fetch trips:", err);
+        setError("Impossible de charger les trajets. Veuillez réessayer plus tard.");
+        setLoading(false);
+      });
+  }, []);
 
-  const filteredTrips = mockTrips.filter((trip) => {
+  const filteredTrips = trips.filter((trip) => {
     const matchesSearch =
       trip.driver.toLowerCase().includes(searchQuery.toLowerCase()) ||
       trip.from.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -167,33 +158,6 @@ export default function TripsPage() {
     return pages
   }
 
-  // Persist preferences
-  React.useEffect(() => {
-    try {
-      localStorage.setItem("trips:density", density)
-    } catch {}
-  }, [density])
-  React.useEffect(() => {
-    try {
-      localStorage.setItem("trips:visible", JSON.stringify(visible))
-    } catch {}
-  }, [visible])
-  React.useEffect(() => {
-    try {
-      localStorage.setItem("trips:filterStatus", filterStatus)
-      localStorage.setItem("trips:search", searchQuery)
-    } catch {}
-  }, [filterStatus, searchQuery])
-  React.useEffect(() => {
-    try {
-      const fs = localStorage.getItem("trips:filterStatus")
-      const sq = localStorage.getItem("trips:search")
-      if (fs) setFilterStatus(fs)
-      if (sq) setSearchQuery(sq)
-    } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   const handleModerateTrip = (tripId: number, approved: boolean) => {
     if (!approved) {
       setConfirmState({
@@ -222,12 +186,136 @@ export default function TripsPage() {
       completed: { label: "Terminé", className: "bg-chart-2/10 text-chart-2 border-chart-2/20" },
       cancelled: { label: "Annulé", className: "bg-destructive/10 text-destructive border-destructive/20" },
     }
-    const variant = variants[status] || variants.active
+    const variant = variants[status] || variants.pending
     return (
       <Badge variant="outline" className={variant.className}>
         {variant.label}
       </Badge>
     )
+  }
+
+  const renderTableBody = () => {
+    if (loading) {
+      return Array.from({ length: 5 }).map((_, i) => (
+        <TableRow key={`skeleton-${i}`} className={density === "compact" ? "h-10" : "h-14"}>
+          <TableCell><Skeleton className="h-5 w-32" /></TableCell>
+          {visible.route && <TableCell><Skeleton className="h-5 w-40" /></TableCell>}
+          {visible.datetime && <TableCell><Skeleton className="h-5 w-24" /></TableCell>}
+          {visible.type && <TableCell><Skeleton className="h-5 w-16" /></TableCell>}
+          {visible.seats && <TableCell><Skeleton className="h-5 w-12" /></TableCell>}
+          {visible.price && <TableCell><Skeleton className="h-5 w-16" /></TableCell>}
+          {visible.status && <TableCell><Skeleton className="h-5 w-20" /></TableCell>}
+          {visible.actions && <TableCell><Skeleton className="h-8 w-20" /></TableCell>}
+        </TableRow>
+      ));
+    }
+
+    if (error) {
+      return (
+        <TableRow>
+          <TableCell colSpan={8}>
+            <Empty className="border mt-4">
+              <EmptyHeader><EmptyTitle className="text-destructive">{error}</EmptyTitle></EmptyHeader>
+            </Empty>
+          </TableCell>
+        </TableRow>
+      );
+    }
+    
+    if (filteredTrips.length === 0) {
+      return (
+        <TableRow>
+          <TableCell colSpan={8}>
+            <Empty className="border mt-4">
+              <EmptyHeader>
+                <EmptyMedia variant="icon"><Car className="h-5 w-5" /></EmptyMedia>
+                <EmptyTitle>Aucun trajet trouvé</EmptyTitle>
+                <EmptyDescription>Modifiez vos filtres ou réinitialisez la recherche.</EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setSearchQuery("")}>Effacer la recherche</Button>
+                  <Button variant="secondary" size="sm" onClick={() => setFilterStatus("all")}>Statut: Tous</Button>
+                </div>
+              </EmptyContent>
+            </Empty>
+          </TableCell>
+        </TableRow>
+      );
+    }
+
+    return paginatedTrips.map((trip) => (
+      <TableRow key={trip.id} className={density === "compact" ? "h-10" : "h-14"}>
+        <TableCell>
+          <div className="flex items-center gap-3">
+            <Avatar>
+              <AvatarFallback>
+                {trip.driver
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <p className="font-medium">{trip.driver}</p>
+              <p className="text-xs text-muted-foreground">{trip.vehicle}</p>
+            </div>
+          </div>
+        </TableCell>
+        {visible.route && <TableCell>
+          <div className="space-y-1">
+            <div className="flex items-center gap-1 text-sm">
+              <MapPin className="h-3 w-3 text-muted-foreground" />
+              {trip.from}
+            </div>
+            <div className="flex items-center gap-1 text-sm">
+              <MapPin className="h-3 w-3 text-accent" />
+              {trip.to}
+            </div>
+          </div>
+        </TableCell>}
+        {visible.datetime && <TableCell>
+          <div className="flex items-center gap-1 text-sm">
+            <Calendar className="h-3 w-3 text-muted-foreground" />
+            <span>{trip.date}</span>
+            <span className="text-muted-foreground">à {trip.time}</span>
+          </div>
+        </TableCell>}
+        {visible.type && <TableCell>
+          <Badge variant="outline" className="capitalize">
+            {trip.type === "car" ? <Car className="mr-1 h-3 w-3" /> : <span className="mr-1">🏍️</span>}
+            {trip.type === "car" ? "Voiture" : "Moto"}
+          </Badge>
+        </TableCell>}
+        {visible.seats && <TableCell>
+          <div className="flex items-center gap-1 text-sm">
+            <Users className="h-3 w-3 text-muted-foreground" />
+            <span>
+              {trip.available}/{trip.seats}
+            </span>
+          </div>
+        </TableCell>}
+        {visible.price && <TableCell className="font-medium">{trip.price} FCFA</TableCell>}
+        {visible.status && <TableCell>{getStatusBadge(trip.status)}</TableCell>}
+        {visible.actions && <TableCell>
+          <div className="flex items-center justify-end gap-2">
+            <Button aria-label="Voir détails trajet" variant="ghost" size="icon" onClick={() => setSelectedTrip(trip)}>
+              <Eye className="h-4 w-4" />
+            </Button>
+            {trip.status === "pending" && (
+              <>
+                <Button variant="ghost" size="icon" onClick={() => handleModerateTrip(trip.id, true)}>
+                  <CheckCircle className="h-4 w-4 text-accent" />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => handleModerateTrip(trip.id, false)}>
+                  <XCircle className="h-4 w-4 text-destructive" />
+                </Button>
+              </>
+            )}
+          </div>
+        </TableCell>}
+      </TableRow>
+    ));
   }
 
   return (
@@ -254,7 +342,7 @@ export default function TripsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Liste des trajets</CardTitle>
-            <CardDescription>Total: {mockTrips.length} trajets créés</CardDescription>
+            <CardDescription>Total: {totalItems} trajets trouvés</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -282,89 +370,13 @@ export default function TripsPage() {
                     <SelectItem value="cancelled">Annulés</SelectItem>
                   </SelectContent>
                 </Select>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline">Affichage</Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuLabel>Densité</DropdownMenuLabel>
-                    <div className="flex gap-2 px-2 py-1.5">
-                      <Button
-                        size="sm"
-                        variant={density === "spacious" ? "secondary" : "outline"}
-                        onClick={() => setDensity("spacious")}
-                      >
-                        Spacieux
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={density === "compact" ? "secondary" : "outline"}
-                        onClick={() => setDensity("compact")}
-                      >
-                        Compact
-                      </Button>
-                    </div>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel>Colonnes</DropdownMenuLabel>
-                    <div className="grid gap-1 px-2 py-1.5">
-                      <label className="flex items-center gap-2 text-sm">
-                        <Checkbox checked={visible.route} onCheckedChange={(v) => setVisible({ ...visible, route: Boolean(v) })} />
-                        Trajet
-                      </label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <Checkbox checked={visible.datetime} onCheckedChange={(v) => setVisible({ ...visible, datetime: Boolean(v) })} />
-                        Date & heure
-                      </label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <Checkbox checked={visible.type} onCheckedChange={(v) => setVisible({ ...visible, type: Boolean(v) })} />
-                        Type
-                      </label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <Checkbox checked={visible.seats} onCheckedChange={(v) => setVisible({ ...visible, seats: Boolean(v) })} />
-                        Places
-                      </label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <Checkbox checked={visible.price} onCheckedChange={(v) => setVisible({ ...visible, price: Boolean(v) })} />
-                        Prix
-                      </label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <Checkbox checked={visible.status} onCheckedChange={(v) => setVisible({ ...visible, status: Boolean(v) })} />
-                        Statut
-                      </label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <Checkbox checked={visible.actions} onCheckedChange={(v) => setVisible({ ...visible, actions: Boolean(v) })} />
-                        Actions
-                      </label>
-                    </div>
-                  </DropdownMenuContent>
-                </DropdownMenu>
                 <Button onClick={() => setShowAddDialog(true)}>
                   <Car className="mr-2 h-4 w-4" />
                   Ajouter un trajet
                 </Button>
               </div>
             </div>
-
-            {(searchQuery || filterStatus !== "all") && (
-              <div className="mb-4 flex flex-wrap items-center gap-2">
-                {searchQuery && (
-                  <Button variant="secondary" size="sm" className="gap-1" onClick={() => setSearchQuery("")}>
-                    <X className="h-3.5 w-3.5" />
-                    Recherche: “{searchQuery}”
-                  </Button>
-                )}
-                {filterStatus !== "all" && (
-                  <Button variant="secondary" size="sm" className="gap-1" onClick={() => setFilterStatus("all")}>
-                    <X className="h-3.5 w-3.5" />
-                    Statut: {filterStatus}
-                  </Button>
-                )}
-                <Button variant="outline" size="sm" onClick={() => { setSearchQuery(""); setFilterStatus("all") }}>
-                  Réinitialiser
-                </Button>
-              </div>
-            )}
-
+            
             <div className="rounded-lg border border-border">
               <Table className={density === "compact" ? "text-sm" : ""}>
                 <TableHeader>
@@ -400,98 +412,7 @@ export default function TripsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredTrips.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8}>
-                        <Empty className="border mt-4">
-                          <EmptyHeader>
-                            <EmptyMedia variant="icon">
-                              <Car className="h-5 w-5" />
-                            </EmptyMedia>
-                            <EmptyTitle>Aucun trajet trouvé</EmptyTitle>
-                            <EmptyDescription>Modifiez vos filtres ou réinitialisez la recherche.</EmptyDescription>
-                          </EmptyHeader>
-                          <EmptyContent>
-                            <div className="flex gap-2">
-                              <Button variant="outline" size="sm" onClick={() => setSearchQuery("")}>Effacer la recherche</Button>
-                              <Button variant="secondary" size="sm" onClick={() => setFilterStatus("all")}>Statut: Tous</Button>
-                            </div>
-                          </EmptyContent>
-                        </Empty>
-                      </TableCell>
-                    </TableRow>
-                  ) : paginatedTrips.map((trip) => (
-                    <TableRow key={trip.id} className={density === "compact" ? "h-10" : "h-14"}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarFallback>
-                              {trip.driver
-                                .split(" ")
-                                .map((n) => n[0])
-                                .join("")}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium">{trip.driver}</p>
-                            <p className="text-xs text-muted-foreground">{trip.vehicle}</p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      {visible.route && <TableCell>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1 text-sm">
-                            <MapPin className="h-3 w-3 text-muted-foreground" />
-                            {trip.from}
-                          </div>
-                          <div className="flex items-center gap-1 text-sm">
-                            <MapPin className="h-3 w-3 text-accent" />
-                            {trip.to}
-                          </div>
-                        </div>
-                      </TableCell>}
-                      {visible.datetime && <TableCell>
-                        <div className="flex items-center gap-1 text-sm">
-                          <Calendar className="h-3 w-3 text-muted-foreground" />
-                          <span>{trip.date}</span>
-                          <span className="text-muted-foreground">à {trip.time}</span>
-                        </div>
-                      </TableCell>}
-                      {visible.type && <TableCell>
-                        <Badge variant="outline" className="capitalize">
-                          {trip.type === "car" ? <Car className="mr-1 h-3 w-3" /> : <span className="mr-1">🏍️</span>}
-                          {trip.type === "car" ? "Voiture" : "Moto"}
-                        </Badge>
-                      </TableCell>}
-                      {visible.seats && <TableCell>
-                        <div className="flex items-center gap-1 text-sm">
-                          <Users className="h-3 w-3 text-muted-foreground" />
-                          <span>
-                            {trip.available}/{trip.seats}
-                          </span>
-                        </div>
-                      </TableCell>}
-                      {visible.price && <TableCell className="font-medium">{trip.price} FCFA</TableCell>}
-                      {visible.status && <TableCell>{getStatusBadge(trip.status)}</TableCell>}
-                      {visible.actions && <TableCell>
-                        <div className="flex items-center justify-end gap-2">
-                          <Button aria-label="Voir détails trajet" variant="ghost" size="icon" onClick={() => setSelectedTrip(trip)}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          {trip.status === "pending" && (
-                            <>
-                              <Button variant="ghost" size="icon" onClick={() => handleModerateTrip(trip.id, true)}>
-                                <CheckCircle className="h-4 w-4 text-accent" />
-                              </Button>
-                              <Button variant="ghost" size="icon" onClick={() => handleModerateTrip(trip.id, false)}>
-                                <XCircle className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>}
-                    </TableRow>
-                  ))}
+                  {renderTableBody()}
                 </TableBody>
               </Table>
             </div>
@@ -563,112 +484,6 @@ export default function TripsPage() {
         </Card>
       </div>
 
-      {/* Dialog: Ajouter un trajet */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Ajouter un trajet</DialogTitle>
-            <DialogDescription>Renseignez les informations de base du trajet</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="trip-driver">Conducteur</Label>
-              <Input
-                id="trip-driver"
-                value={newTrip.driver}
-                onChange={(e) => setNewTrip({ ...newTrip, driver: e.target.value })}
-                placeholder="Ex: Amadou Diallo"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="trip-from">Départ</Label>
-              <Input
-                id="trip-from"
-                value={newTrip.from}
-                onChange={(e) => setNewTrip({ ...newTrip, from: e.target.value })}
-                placeholder="Ex: Bamako Centre"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="trip-to">Arrivée</Label>
-              <Input
-                id="trip-to"
-                value={newTrip.to}
-                onChange={(e) => setNewTrip({ ...newTrip, to: e.target.value })}
-                placeholder="Ex: Université de Bamako"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="trip-date">Date</Label>
-              <Input
-                id="trip-date"
-                type="date"
-                value={newTrip.date}
-                onChange={(e) => setNewTrip({ ...newTrip, date: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="trip-time">Heure</Label>
-              <Input
-                id="trip-time"
-                type="time"
-                value={newTrip.time}
-                onChange={(e) => setNewTrip({ ...newTrip, time: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="trip-price">Prix (FCFA)</Label>
-              <Input
-                id="trip-price"
-                type="number"
-                value={newTrip.price}
-                onChange={(e) => setNewTrip({ ...newTrip, price: e.target.value })}
-                placeholder="1500"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="trip-seats">Places</Label>
-              <Input
-                id="trip-seats"
-                type="number"
-                value={newTrip.seats}
-                onChange={(e) => setNewTrip({ ...newTrip, seats: e.target.value })}
-                placeholder="3"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Type</Label>
-              <Select value={newTrip.type} onValueChange={(v) => setNewTrip({ ...newTrip, type: v })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="car">Voiture</SelectItem>
-                  <SelectItem value="moto">Moto</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter className="sm:justify-between">
-            <Button variant="secondary" onClick={() => setShowAddDialog(false)}>
-              Annuler
-            </Button>
-            <Button
-              onClick={() => {
-                if (!newTrip.driver || !newTrip.from || !newTrip.to || !newTrip.date || !newTrip.time) {
-                  toast({ title: "Champs requis", description: "Renseignez conducteur, départ, arrivée, date et heure.", variant: "destructive" })
-                  return
-                }
-                toast({ title: "Trajet ajouté", description: "Le trajet a été créé (simulé)." })
-                setShowAddDialog(false)
-                setNewTrip({ driver: "", from: "", to: "", date: "", time: "", price: "", seats: "", type: "car" })
-              }}
-            >
-              Enregistrer
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={!!selectedTrip} onOpenChange={() => setSelectedTrip(null)}>
         <DialogContent className="max-w-2xl">
@@ -742,24 +557,6 @@ export default function TripsPage() {
                 </Button>
               </>
             )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Confirm dialog (trips) */}
-      <Dialog open={confirmState.open} onOpenChange={(v) => setConfirmState((s) => ({ ...s, open: v }))}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{confirmState.title}</DialogTitle>
-            {confirmState.description && <DialogDescription>{confirmState.description}</DialogDescription>}
-          </DialogHeader>
-          <DialogFooter className="sm:justify-between">
-            <Button variant="secondary" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>
-              Annuler
-            </Button>
-            <Button variant="destructive" onClick={confirmState.onConfirm}>
-              Confirmer
-            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,15 +1,13 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
+import React, { useState, useEffect, useMemo, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -23,8 +21,24 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Send, Bell, Users, AlertTriangle, Gift, Calendar } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { MessageService } from "@/services/MessageService"
+import { AdminService } from "@/services/AdminService"
+import { AdminUser } from "@/models"
+import { Spinner } from "@/components/ui/spinner"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
-const mockNotifications = [
+// Placeholder for notification history item (since no API is provided for this)
+interface NotificationHistoryItem {
+  id: number;
+  title: string;
+  message: string;
+  type: string;
+  target: string;
+  sentDate: string;
+  recipients: number;
+}
+
+const mockNotifications: NotificationHistoryItem[] = [
   {
     id: 1,
     title: "Promotion de fin d'année",
@@ -57,14 +71,43 @@ const mockNotifications = [
 export default function NotificationsPage() {
   const { toast } = useToast()
   const [showDialog, setShowDialog] = useState(false)
-  const [notificationData, setNotificationData] = useState({
-    title: "",
-    message: "",
-    type: "general",
-    target: "all",
-  })
+  const [messageContent, setMessageContent] = useState("")
+  const [selectedRecipientIds, setSelectedRecipientIds] = useState<number[]>([]) // Array of user IDs
+  const [allUsers, setAllUsers] = useState<AdminUser[]>([])
+  const [isSending, setIsSending] = useState(false)
+  const [loadingUsers, setLoadingUsers] = useState(true)
+  const [usersError, setUsersError] = useState<string | null>(null)
 
-  // Client-side pagination
+  const messageService = useMemo(() => new MessageService(), [])
+  const adminService = useMemo(() => new AdminService(), [])
+
+  // Fetch all users for recipient selection
+  useEffect(() => {
+    const fetchUsers = async () => {
+      setLoadingUsers(true)
+      setUsersError(null)
+      try {
+        const usersData = await adminService.getAllUsers()
+        setAllUsers(usersData)
+      } catch (err) {
+        setUsersError(err instanceof Error ? err.message : "Impossible de charger la liste des utilisateurs.")
+        toast({
+          variant: "destructive",
+          title: "Erreur",
+          description: "Impossible de charger la liste des utilisateurs pour la sélection des destinataires.",
+        })
+      } finally {
+        setLoadingUsers(false)
+      }
+    }
+
+    if (showDialog) { // Only fetch users when the dialog is opened
+      fetchUsers()
+    }
+  }, [showDialog, adminService, toast])
+
+
+  // Client-side pagination for mock history
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const totalItems = mockNotifications.length
@@ -85,18 +128,39 @@ export default function NotificationsPage() {
     return pages
   }
 
-  const handleSendNotification = () => {
-    toast({
-      title: "Notification envoyée",
-      description: `${getTargetLabel(notificationData.target)} ont reçu la notification.`,
-    })
-    setShowDialog(false)
-    setNotificationData({
-      title: "",
-      message: "",
-      type: "general",
-      target: "all",
-    })
+  const handleSendNotification = async () => {
+    if (!messageContent.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Message vide",
+        description: "Veuillez écrire un message à envoyer.",
+      })
+      return
+    }
+
+    setIsSending(true)
+    try {
+      await messageService.sendAdminBroadcastMessage({
+        recipientIds: selectedRecipientIds,
+        content: messageContent,
+      })
+      toast({
+        title: "Notification envoyée",
+        description: selectedRecipientIds.length === 0 ? "Le message a été envoyé à tous les utilisateurs." : `Le message a été envoyé à ${selectedRecipientIds.length} destinataire(s).`,
+      })
+      setShowDialog(false)
+      setMessageContent("")
+      setSelectedRecipientIds([])
+      // Potentially refresh notification history here if there was an API for it
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Erreur d'envoi",
+        description: err instanceof Error ? err.message : "Une erreur est survenue lors de l'envoi de la notification.",
+      })
+    } finally {
+      setIsSending(false)
+    }
   }
 
   const getTypeBadge = (type: string) => {
@@ -131,10 +195,13 @@ export default function NotificationsPage() {
     )
   }
 
-  const getTargetLabel = (target: string) => {
+  const getTargetLabel = (target: string | number[]) => {
+    if (Array.isArray(target)) {
+        return target.length === 0 ? "Tous les utilisateurs" : `${target.length} utilisateur(s) spécifique(s)`;
+    }
     const labels: Record<string, string> = {
       all: "Tous les utilisateurs",
-      students: "Étudiants uniquement",
+      students: "Étudiants uniquement", // These static options are removed in the new UI but kept for compatibility
       drivers: "Conducteurs uniquement",
       verified: "Utilisateurs vérifiés",
     }
@@ -148,7 +215,13 @@ export default function NotificationsPage() {
           <h1 className="text-3xl font-bold tracking-tight text-primary">Notifications</h1>
           <p className="text-muted-foreground">Envoyez des notifications ciblées aux utilisateurs</p>
         </div>
-        <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <Dialog open={showDialog} onOpenChange={(open) => {
+            setShowDialog(open);
+            if (!open) { // Reset form on close
+                setMessageContent("");
+                setSelectedRecipientIds([]);
+            }
+        }}>
           <DialogTrigger asChild>
             <Button>
               <Send className="mr-2 h-4 w-4" />
@@ -158,71 +231,88 @@ export default function NotificationsPage() {
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Créer une notification</DialogTitle>
-              <DialogDescription>Envoyez une notification personnalisée à un groupe d'utilisateurs</DialogDescription>
+              <DialogDescription>Envoyez un message à des utilisateurs spécifiques ou à tous.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="title">Titre</Label>
-                <Input
-                  id="title"
-                  placeholder="Ex: Promotion de fin d'année"
-                  value={notificationData.title}
-                  onChange={(e) => setNotificationData({ ...notificationData, title: e.target.value })}
-                />
-              </div>
+            <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label htmlFor="message">Message</Label>
                 <Textarea
                   id="message"
                   placeholder="Écrivez votre message..."
                   className="min-h-[120px]"
-                  value={notificationData.message}
-                  onChange={(e) => setNotificationData({ ...notificationData, message: e.target.value })}
+                  value={messageContent}
+                  onChange={(e) => setMessageContent(e.target.value)}
                 />
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="type">Type</Label>
+              <div className="space-y-2">
+                <Label htmlFor="recipients">Destinataires</Label>
+                {loadingUsers ? (
+                  <Spinner size="sm" className="ml-2" />
+                ) : usersError ? (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Erreur</AlertTitle>
+                    <AlertDescription>{usersError}</AlertDescription>
+                  </Alert>
+                ) : (
                   <Select
-                    value={notificationData.type}
-                    onValueChange={(value) => setNotificationData({ ...notificationData, type: value })}
+                    value={selectedRecipientIds.length === 0 ? "all" : selectedRecipientIds.map(String).join(',')}
+                    onValueChange={(value) => {
+                      if (value === "all") {
+                        setSelectedRecipientIds([]); // Empty array means all users
+                      } else {
+                        // For multi-select, assuming value is a comma-separated string of IDs
+                        // This Select component from shadcn/ui does not natively support multi-select.
+                        // For a true multi-select, a custom component or a workaround for Select would be needed.
+                        // For demonstration, selecting one means replacing current selection.
+                        // A more robust solution for multiple selections would involve checkboxes or a dedicated multi-select component.
+                        const newId = Number(value);
+                        if (!selectedRecipientIds.includes(newId)) {
+                            setSelectedRecipientIds(prev => [...prev, newId]);
+                        } else {
+                            setSelectedRecipientIds(prev => prev.filter(id => id !== newId));
+                        }
+                      }
+                    }}
                   >
-                    <SelectTrigger id="type">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="general">Général</SelectItem>
-                      <SelectItem value="promotion">Promotion</SelectItem>
-                      <SelectItem value="safety">Sécurité</SelectItem>
-                      <SelectItem value="feature">Nouveauté</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="target">Destinataires</Label>
-                  <Select
-                    value={notificationData.target}
-                    onValueChange={(value) => setNotificationData({ ...notificationData, target: value })}
-                  >
-                    <SelectTrigger id="target">
-                      <SelectValue />
+                    <SelectTrigger id="recipients">
+                      <SelectValue placeholder="Sélectionner les destinataires (laissez vide pour tous)" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Tous les utilisateurs</SelectItem>
-                      <SelectItem value="students">Étudiants uniquement</SelectItem>
-                      <SelectItem value="drivers">Conducteurs uniquement</SelectItem>
-                      <SelectItem value="verified">Utilisateurs vérifiés</SelectItem>
+                      <SelectGroup>
+                        <SelectLabel>Utilisateurs individuels</SelectLabel>
+                        {allUsers.map(user => (
+                          <SelectItem key={user.id} value={user.id.toString()}>
+                            {user.firstName} {user.lastName} ({user.email})
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
                     </SelectContent>
                   </Select>
-                </div>
+                )}
+                {/* Display current selections */}
+                {selectedRecipientIds.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        {selectedRecipientIds.map(id => {
+                            const user = allUsers.find(u => u.id === id);
+                            return user ? (
+                                <Badge key={id} variant="secondary" className="flex items-center gap-1">
+                                    {user.firstName} {user.lastName}
+                                    <X className="h-3 w-3 cursor-pointer" onClick={() => setSelectedRecipientIds(prev => prev.filter(recId => recId !== id))} />
+                                </Badge>
+                            ) : null;
+                        })}
+                    </div>
+                )}
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowDialog(false)}>
+              <Button variant="outline" onClick={() => setShowDialog(false)} disabled={isSending}>
                 Annuler
               </Button>
-              <Button onClick={handleSendNotification}>
-                <Send className="mr-2 h-4 w-4" />
+              <Button onClick={handleSendNotification} disabled={isSending || !messageContent.trim()}>
+                {isSending ? <Spinner className="mr-2" /> : <Send className="mr-2 h-4 w-4" />}
                 Envoyer
               </Button>
             </DialogFooter>

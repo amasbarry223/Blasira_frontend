@@ -17,4 +17,5 @@ export * from './UserAccountService';
 export * from './UserProfileService';
 export * from './UserRoleService';
 export * from './VehicleService';
+export * from './SupportService';
 

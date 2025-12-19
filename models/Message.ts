@@ -18,3 +18,13 @@ export interface UpdateMessageDto {
   isRead?: boolean;
 }
 
+export interface SendMessageRequest {
+  recipientId: number;
+  content: string;
+}
+
+export interface AdminBroadcastMessageRequest {
+  recipientIds: number[];
+  content: string;
+}
+

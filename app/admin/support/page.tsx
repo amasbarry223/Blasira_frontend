@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState, useEffect, useMemo, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -19,133 +19,167 @@ import {
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
-import { Search, MessageSquare, Clock, CheckCircle, Eye } from "lucide-react"
+import { Search, MessageSquare, Clock, CheckCircle, Eye, Send } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-
-const mockTickets = [
-  {
-    id: 1,
-    user: "Amadou Diarra",
-    subject: "Problème de paiement",
-    category: "payment",
-    priority: "high",
-    status: "open",
-    message: "Je n'arrive pas à effectuer mon paiement pour le trajet",
-    date: "2024-12-14",
-  },
-  {
-    id: 2,
-    user: "Fatoumata Keita",
-    subject: "Compte bloqué",
-    category: "account",
-    priority: "high",
-    status: "open",
-    message: "Mon compte a été bloqué sans raison apparente",
-    date: "2024-12-14",
-  },
-  {
-    id: 3,
-    user: "Ibrahim Touré",
-    subject: "Question sur la vérification",
-    category: "verification",
-    priority: "medium",
-    status: "pending",
-    message: "Combien de temps prend la vérification des documents?",
-    date: "2024-12-13",
-  },
-  {
-    id: 4,
-    user: "Mariam Sanogo",
-    subject: "Remboursement",
-    category: "payment",
-    priority: "medium",
-    status: "resolved",
-    message: "Je souhaite être remboursée pour un trajet annulé",
-    date: "2024-12-12",
-  },
-]
+import { SupportService, MessageService } from "@/services"
+import { SupportTicket, PaginatedSupportTickets } from "@/models"
+import { Spinner } from "@/components/ui/spinner"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 export default function SupportPage() {
   const { toast } = useToast()
+  const [paginatedResponse, setPaginatedResponse] = useState<PaginatedSupportTickets | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null)
+  const [isModalLoading, setIsModalLoading] = useState(false);
+  const [replyContent, setReplyContent] = useState("");
+
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedTicket, setSelectedTicket] = useState<(typeof mockTickets)[0] | null>(null)
   const [filterStatus, setFilterStatus] = useState<string>("all")
-
-  const filteredTickets = mockTickets.filter((ticket) => {
-    const matchesSearch =
-      ticket.user.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ticket.subject.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesFilter = filterStatus === "all" || ticket.status === filterStatus
-    return matchesSearch && matchesFilter
-  })
-
-  // Client-side pagination
-  const [page, setPage] = useState(1)
+  const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(10)
-  const totalItems = filteredTickets.length
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize))
-  const currentPage = Math.min(page, totalPages)
-  const startIndex = (currentPage - 1) * pageSize
-  const endIndex = Math.min(startIndex + pageSize, totalItems)
-  const paginatedTickets = filteredTickets.slice(startIndex, endIndex)
-  const getPageList = (total: number, current: number): (number | string)[] => {
-    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
-    const pages: (number | string)[] = [1]
-    if (current > 3) pages.push("...")
-    const s = Math.max(2, current - 1)
-    const e = Math.min(total - 1, current + 1)
-    for (let p = s; p <= e; p++) pages.push(p)
-    if (current < total - 2) pages.push("...")
-    pages.push(total)
-    return pages
+
+  const supportService = useMemo(() => new SupportService(), [])
+  const messageService = useMemo(() => new MessageService(), [])
+
+  const loadTickets = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const data = await supportService.getTickets({ page, limit: pageSize, status: filterStatus, search: searchQuery })
+      setPaginatedResponse(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Une erreur est survenue.")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [supportService, page, pageSize, filterStatus, searchQuery])
+
+  useEffect(() => {
+    loadTickets()
+  }, [loadTickets])
+  
+  const handleOpenTicket = async (ticketId: number) => {
+    setIsModalLoading(true);
+    try {
+        const fullTicket = await supportService.getTicketById(ticketId);
+        setSelectedTicket(fullTicket);
+    } catch(err) {
+        toast({
+            variant: "destructive",
+            title: "Erreur",
+            description: "Impossible de charger les détails du ticket.",
+        });
+    } finally {
+        setIsModalLoading(false);
+    }
   }
 
-  const handleResolve = (id: number) => {
-    toast({
-      title: "Ticket résolu",
-      description: "L'utilisateur a été notifié de la résolution.",
-    })
-    setSelectedTicket(null)
+  const handleResolve = async (id: number) => {
+    try {
+      await supportService.updateTicketStatus(id, "RESOLVED");
+      toast({
+        title: "Ticket résolu",
+        description: "L'utilisateur a été notifié de la résolution.",
+      })
+      setSelectedTicket(null);
+      loadTickets(); // Refresh the list
+    } catch(err) {
+        toast({
+            variant: "destructive",
+            title: "Erreur",
+            description: "Impossible de résoudre le ticket.",
+        });
+    }
+  }
+
+  const handleReply = async () => {
+    if (!selectedTicket || !replyContent.trim()) return;
+    setIsModalLoading(true);
+    try {
+      await messageService.sendMessage({ 
+        recipientId: selectedTicket.user.id,
+        content: replyContent 
+      });
+      setReplyContent("");
+      toast({
+        title: "Réponse envoyée",
+      });
+      
+      // Add a small delay to allow the backend to process the new message
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Re-fetch the ticket to get the new message and ensure UI consistency
+      await handleOpenTicket(selectedTicket.id); 
+    } catch(err) {
+      toast({
+            variant: "destructive",
+            title: "Erreur",
+            description: "Impossible d'envoyer la réponse.",
+        });
+    } finally {
+      // Keep the modal loading state consistent with the re-fetch
+      // setIsModalLoading(false) will be called inside handleOpenTicket
+    }
   }
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { label: string; className: string }> = {
-      open: { label: "Ouvert", className: "bg-chart-4/10 text-chart-4 border-chart-4/20" },
-      pending: { label: "En attente", className: "bg-chart-3/10 text-chart-3 border-chart-3/20" },
-      resolved: { label: "Résolu", className: "bg-accent/10 text-accent border-accent/20" },
+      OPEN: { label: "Ouvert", className: "bg-chart-4/10 text-chart-4 border-chart-4/20" },
+      PENDING: { label: "En attente", className: "bg-chart-3/10 text-chart-3 border-chart-3/20" },
+      RESOLVED: { label: "Résolu", className: "bg-accent/10 text-accent border-accent/20" },
     }
-    const variant = variants[status] || variants.open
-    return (
-      <Badge variant="outline" className={variant.className}>
-        {variant.label}
-      </Badge>
-    )
+    const variant = variants[status] || variants.OPEN
+    return <Badge variant="outline" className={variant.className}>{variant.label}</Badge>
   }
 
   const getPriorityBadge = (priority: string) => {
     const variants: Record<string, { label: string; className: string }> = {
-      low: { label: "Basse", className: "bg-muted/10 text-muted-foreground border-muted/20" },
-      medium: { label: "Moyenne", className: "bg-chart-3/10 text-chart-3 border-chart-3/20" },
-      high: { label: "Haute", className: "bg-destructive/10 text-destructive border-destructive/20" },
+      LOW: { label: "Basse", className: "bg-muted/10 text-muted-foreground border-muted/20" },
+      MEDIUM: { label: "Moyenne", className: "bg-chart-3/10 text-chart-3 border-chart-3/20" },
+      HIGH: { label: "Haute", className: "bg-destructive/10 text-destructive border-destructive/20" },
     }
-    const variant = variants[priority] || variants.medium
-    return (
-      <Badge variant="outline" className={variant.className}>
-        {variant.label}
-      </Badge>
-    )
+    const variant = variants[priority] || variants.MEDIUM
+    return <Badge variant="outline" className={variant.className}>{variant.label}</Badge>
   }
 
   const getCategoryLabel = (category: string) => {
     const labels: Record<string, string> = {
-      payment: "Paiement",
-      account: "Compte",
-      verification: "Vérification",
-      technical: "Technique",
-      other: "Autre",
+      PAYMENT: "Paiement",
+      ACCOUNT: "Compte",
+      VERIFICATION: "Vérification",
+      TECHNICAL: "Technique",
+      PROFILE: "Profil",
+      OTHER: "Autre",
     }
     return labels[category] || category
   }
+
+  if (isLoading && !paginatedResponse) {
+    return (
+      <div className="flex h-[80vh] items-center justify-center">
+        <Spinner className="mr-2" />
+        <span className="text-muted-foreground">Chargement des tickets...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-[80vh] items-center justify-center">
+        <Alert variant="destructive" className="w-auto max-w-lg">
+          <AlertTitle>Erreur</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  const tickets = paginatedResponse?.data || [];
+  const pagination = paginatedResponse?.pagination;
+  const totalItems = pagination?.totalItems || 0;
 
   return (
     <div className="space-y-6">
@@ -154,57 +188,10 @@ export default function SupportPage() {
         <p className="text-muted-foreground">Gérez les demandes d'assistance et les questions des utilisateurs</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-4">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">Tickets ouverts</p>
-                <p className="text-3xl font-bold">{mockTickets.filter((t) => t.status === "open").length}</p>
-              </div>
-              <MessageSquare className="h-8 w-8 text-chart-4" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">En attente</p>
-                <p className="text-3xl font-bold">{mockTickets.filter((t) => t.status === "pending").length}</p>
-              </div>
-              <Clock className="h-8 w-8 text-chart-3" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">Résolus</p>
-                <p className="text-3xl font-bold">{mockTickets.filter((t) => t.status === "resolved").length}</p>
-              </div>
-              <CheckCircle className="h-8 w-8 text-accent" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">Total</p>
-                <p className="text-3xl font-bold">{mockTickets.length}</p>
-              </div>
-              <MessageSquare className="h-8 w-8 text-primary" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       <Card>
         <CardHeader>
           <CardTitle>Tickets de support</CardTitle>
-          <CardDescription>Demandes d'assistance des utilisateurs</CardDescription>
+          <CardDescription>Total: {totalItems} demandes</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -218,14 +205,12 @@ export default function SupportPage() {
               />
             </div>
             <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tous les statuts</SelectItem>
-                <SelectItem value="open">Ouverts</SelectItem>
-                <SelectItem value="pending">En attente</SelectItem>
-                <SelectItem value="resolved">Résolus</SelectItem>
+                <SelectItem value="OPEN">Ouverts</SelectItem>
+                <SelectItem value="PENDING">En attente</SelectItem>
+                <SelectItem value="RESOLVED">Résolus</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -239,35 +224,28 @@ export default function SupportPage() {
                   <TableHead>Catégorie</TableHead>
                   <TableHead>Priorité</TableHead>
                   <TableHead>Statut</TableHead>
-                  <TableHead>Date</TableHead>
+                  <TableHead>Dernière MàJ</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedTickets.map((ticket) => (
+                {isLoading && (
+                    <TableRow><TableCell colSpan={7} className="text-center py-12"><Spinner /></TableCell></TableRow>
+                )}
+                {!isLoading && tickets.length === 0 && (
+                    <TableRow><TableCell colSpan={7} className="text-center py-12">Aucun ticket trouvé.</TableCell></TableRow>
+                )}
+                {!isLoading && tickets.map((ticket) => (
                   <TableRow key={ticket.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-8 w-8">
-                          <AvatarImage src={`/.jpg?height=32&width=32&query=${ticket.user}`} />
-                          <AvatarFallback className="text-xs">
-                            {ticket.user
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("")}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="text-sm font-medium">{ticket.user}</span>
-                      </div>
-                    </TableCell>
+                    <TableCell><span className="text-sm font-medium">{ticket.user?.name || 'N/A'}</span></TableCell>
                     <TableCell className="font-medium">{ticket.subject}</TableCell>
                     <TableCell className="text-sm">{getCategoryLabel(ticket.category)}</TableCell>
                     <TableCell>{getPriorityBadge(ticket.priority)}</TableCell>
                     <TableCell>{getStatusBadge(ticket.status)}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{ticket.date}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{new Date(ticket.lastUpdatedAt).toLocaleString('fr-FR')}</TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => setSelectedTicket(ticket)}>
+                        <Button variant="ghost" size="icon" onClick={() => handleOpenTicket(ticket.id)}>
                           <Eye className="h-4 w-4" />
                         </Button>
                       </div>
@@ -277,70 +255,17 @@ export default function SupportPage() {
               </TableBody>
             </Table>
           </div>
-          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between py-3">
-            <div className="text-sm text-muted-foreground">
-              {totalItems === 0 ? "Aucun élément à afficher" : `Affiche ${startIndex + 1}–${endIndex} sur ${totalItems}`}
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Par page</span>
-                <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1) }}>
-                  <SelectTrigger className="w-[92px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="10">10</SelectItem>
-                    <SelectItem value="20">20</SelectItem>
-                    <SelectItem value="50">50</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          {pagination && (
+            <div className="flex justify-end py-3">
               <Pagination>
                 <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious
-                      href="#"
-                      aria-disabled={currentPage === 1}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        if (currentPage > 1) setPage(currentPage - 1)
-                      }}
-                    />
-                  </PaginationItem>
-                  {getPageList(totalPages, currentPage).map((p, idx) =>
-                    typeof p === "string" ? (
-                      <PaginationItem key={`e-${idx}`}>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    ) : (
-                      <PaginationItem key={p}>
-                        <PaginationLink
-                          href="#"
-                          isActive={p === currentPage}
-                          onClick={(e) => {
-                            e.preventDefault()
-                            setPage(p)
-                          }}
-                        >
-                          {p}
-                        </PaginationLink>
-                      </PaginationItem>
-                    )
-                  )}
-                  <PaginationItem>
-                    <PaginationNext
-                      href="#"
-                      aria-disabled={currentPage === totalPages || totalItems === 0}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        if (currentPage < totalPages) setPage(currentPage + 1)
-                      }}
-                    />
-                  </PaginationItem>
+                  <PaginationItem><PaginationPrevious href="#" onClick={() => setPage(p => Math.max(0, p - 1))} /></PaginationItem>
+                  <PaginationItem><PaginationLink>{pagination.currentPage + 1}</PaginationLink></PaginationItem>
+                  <PaginationItem><PaginationNext href="#" onClick={() => setPage(p => Math.min(pagination.totalPages - 1, p + 1))} /></PaginationItem>
                 </PaginationContent>
               </Pagination>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
@@ -350,60 +275,64 @@ export default function SupportPage() {
             <DialogTitle>Détails du ticket</DialogTitle>
             <DialogDescription>Ticket #{selectedTicket?.id}</DialogDescription>
           </DialogHeader>
-          {selectedTicket && (
+          {isModalLoading ? <div className="py-12 flex justify-center"><Spinner /></div> : selectedTicket && (
             <div className="space-y-6">
               <div className="flex items-start gap-4">
                 <Avatar className="h-12 w-12">
-                  <AvatarImage src={`/.jpg?height=48&width=48&query=${selectedTicket.user}`} />
-                  <AvatarFallback>
-                    {selectedTicket.user
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")}
-                  </AvatarFallback>
+                  <AvatarImage src={`/.jpg?query=${selectedTicket.user.name}`} />
+                  <AvatarFallback>{selectedTicket.user.name.split(" ").map((n) => n[0]).join("")}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
-                  <h3 className="font-semibold">{selectedTicket.user}</h3>
+                  <h3 className="font-semibold">{selectedTicket.user.name}</h3>
                   <p className="text-sm text-muted-foreground">{selectedTicket.subject}</p>
-                  <div className="mt-2 flex items-center gap-2">
-                    {getStatusBadge(selectedTicket.status)}
-                    {getPriorityBadge(selectedTicket.priority)}
-                    <Badge variant="outline">{getCategoryLabel(selectedTicket.category)}</Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  {getStatusBadge(selectedTicket.status)}
+                  {getPriorityBadge(selectedTicket.priority)}
+                </div>
+              </div>
+
+              <div className="space-y-4 max-h-64 overflow-y-auto pr-4">
+                {(selectedTicket.messages && selectedTicket.messages.length > 0) ? (
+                  selectedTicket.messages.map(msg => (
+                    <div key={msg.id} className={`flex gap-3 ${msg.sender.role === 'admin' ? 'justify-end' : ''}`}>
+                      {msg.sender.role === 'user' && <Avatar className="h-8 w-8"><AvatarFallback>{msg.sender.name.charAt(0)}</AvatarFallback></Avatar>}
+                      <div className={`rounded-lg p-3 text-sm ${msg.sender.role === 'admin' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                        <p>{msg.content}</p>
+                        <p className="text-xs text-right mt-1 opacity-70">{new Date(msg.createdAt).toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'})}</p>
+                      </div>
+                      {msg.sender.role === 'admin' && <Avatar className="h-8 w-8"><AvatarFallback>A</AvatarFallback></Avatar>}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center text-sm text-muted-foreground py-8">
+                    Aucun message dans cette conversation.
+                  </div>
+                )}
+              </div>
+
+              {selectedTicket.status !== 'RESOLVED' && (
+                <div className="space-y-2 pt-4 border-t">
+                  <Label htmlFor="response">Réponse</Label>
+                  <div className="flex items-center gap-2">
+                    <Textarea
+                      id="response"
+                      placeholder="Écrivez votre réponse..."
+                      value={replyContent}
+                      onChange={e => setReplyContent(e.target.value)}
+                    />
+                    <Button onClick={handleReply} disabled={!replyContent.trim() || isModalLoading}><Send className="h-4 w-4" /></Button>
                   </div>
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Message</Label>
-                <div className="rounded-lg border border-border p-4">
-                  <p className="text-sm leading-relaxed">{selectedTicket.message}</p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="response">Réponse</Label>
-                <Textarea
-                  id="response"
-                  placeholder="Écrivez votre réponse à l'utilisateur..."
-                  className="min-h-[120px]"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Date de création</p>
-                <p className="text-sm text-muted-foreground">{selectedTicket.date}</p>
-              </div>
+              )}
             </div>
           )}
           <DialogFooter>
-            {selectedTicket?.status !== "resolved" && (
-              <>
-                <Button variant="outline">Enregistrer</Button>
-                <Button onClick={() => selectedTicket && handleResolve(selectedTicket.id)}>
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Résoudre et fermer
-                </Button>
-              </>
+            {selectedTicket?.status !== "RESOLVED" && (
+              <Button onClick={() => handleResolve(selectedTicket!.id)} disabled={isModalLoading}>
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Résoudre et fermer
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>

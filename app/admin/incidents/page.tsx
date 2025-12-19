@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect, useMemo, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Search, Filter, Eye, CheckCircle, AlertTriangle, Clock, X, ArrowUpDown } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { useToast } from "@/components/ui/use-toast"
 import Link from "next/link"
 import {
   Breadcrumb,
@@ -39,88 +39,88 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
-
-const mockIncidents = [
-  {
-    id: 1,
-    reporter: "Aissata Sanogo",
-    reported: "Mamadou Keita",
-    tripId: "TRP-001",
-    type: "retard",
-    severity: "low",
-    status: "open",
-    date: "2024-12-14",
-    description: "Le conducteur est arrivé 30 minutes en retard sans prévenir",
-  },
-  {
-    id: 2,
-    reporter: "Ibrahim Coulibaly",
-    reported: "Fatoumata Traoré",
-    tripId: "TRP-045",
-    type: "comportement",
-    severity: "high",
-    status: "investigating",
-    date: "2024-12-13",
-    description: "Comportement inapproprié pendant le trajet, langage offensant",
-  },
-  {
-    id: 3,
-    reporter: "Mariam Diarra",
-    reported: "Amadou Diallo",
-    tripId: "TRP-023",
-    type: "annulation",
-    severity: "medium",
-    status: "resolved",
-    date: "2024-12-12",
-    description: "Trajet annulé au dernier moment sans justification",
-  },
-  {
-    id: 4,
-    reporter: "Sekou Touré",
-    reported: "Aminata Keita",
-    tripId: "TRP-067",
-    type: "securite",
-    severity: "high",
-    status: "open",
-    date: "2024-12-14",
-    description: "Conduite dangereuse, excès de vitesse constaté",
-  },
-]
+import { Skeleton } from "@/components/ui/skeleton"
+import { IncidentReportService } from "@/services/IncidentReportService"
+import { AdminIncidentReport } from "@/models"
 
 export default function IncidentsPage() {
   const { toast } = useToast()
+  
+  const [incidents, setIncidents] = useState<AdminIncidentReport[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedIncident, setSelectedIncident] = useState<(typeof mockIncidents)[0] | null>(null)
+  const [selectedIncident, setSelectedIncident] = useState<AdminIncidentReport | null>(null)
   const [filterStatus, setFilterStatus] = useState<string>("all")
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; description?: string; onConfirm: () => void }>({ open: false, title: "", description: "", onConfirm: () => {} })
-  const [sort, setSort] = useState<{ key: "reporter" | "severity" | "status" | "date"; dir: "asc" | "desc" }>({ key: "date", dir: "desc" })
-  const [density, setDensity] = useState<"spacious" | "compact">(() => (typeof window !== "undefined" ? (localStorage.getItem("incidents:density") as "spacious" | "compact") || "spacious" : "spacious"))
-  const [visible, setVisible] = useState<{ concerning: boolean; trip: boolean; type: boolean; severity: boolean; status: boolean; date: boolean; actions: boolean }>(() => {
-    if (typeof window === "undefined") {
-      return { concerning: true, trip: true, type: true, severity: true, status: true, date: true, actions: true }
-    }
-    const raw = localStorage.getItem("incidents:visible")
-    return raw ? JSON.parse(raw) : { concerning: true, trip: true, type: true, severity: true, status: true, date: true, actions: true }
-  })
+  const [sort, setSort] = useState<{ key: "reporter" | "severity" | "status" | "createdAt"; dir: "asc" | "desc" }>({ key: "createdAt", dir: "desc" })
+  const [density, setDensity] = useState<"spacious" | "compact">("spacious")
+  const [visible, setVisible] = useState<{ concerning: boolean; trip: boolean; type: boolean; severity: boolean; status: boolean; date: boolean; actions: boolean }>({ concerning: true, trip: true, type: true, severity: true, status: true, date: true, actions: true })
 
-  const filteredIncidents = mockIncidents.filter((incident) => {
+  const incidentService = useMemo(() => new IncidentReportService(), [])
+
+  const loadIncidents = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await incidentService.getAdminIncidentReports()
+      setIncidents(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Impossible de charger les incidents.")
+      toast({
+        variant: "destructive",
+        title: "Erreur de chargement",
+        description: err instanceof Error ? err.message : "Une erreur est survenue lors du chargement des incidents.",
+      });
+    } finally {
+      setLoading(false)
+    }
+  }, [incidentService, toast])
+
+  useEffect(() => {
+    loadIncidents()
+  }, [loadIncidents])
+
+  const handleResolveIncident = async (incidentId: number) => {
+    try {
+      await incidentService.updateIncidentStatus(incidentId, "RESOLVED");
+      toast({
+        title: "Incident résolu",
+        description: "L'incident a été marqué comme résolu.",
+      });
+      setSelectedIncident(null); // Close modal
+      loadIncidents(); // Refresh list
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Erreur",
+        description: err instanceof Error ? err.message : "Impossible de résoudre l'incident.",
+      });
+    }
+  }
+
+  const filteredIncidents = incidents.filter((incident) => {
     const matchesSearch =
-      incident.reporter.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      incident.reported.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      incident.tripId.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesFilter = filterStatus === "all" || incident.status === filterStatus
+      `${incident.reporterFirstName} ${incident.reporterLastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      `${incident.driverFirstName} ${incident.driverLastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      `TRP-${incident.bookingId}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      incident.reason.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesFilter = filterStatus === "all" || incident.status.toLowerCase() === filterStatus.toLowerCase()
     return matchesSearch && matchesFilter
   }).slice().sort((a, b) => {
     const dir = sort.dir === "asc" ? 1 : -1
     switch (sort.key) {
       case "reporter":
-        return a.reporter.localeCompare(b.reporter) * dir
+        return `${a.reporterFirstName} ${a.reporterLastName}`.localeCompare(`${b.reporterFirstName} ${b.reporterLastName}`) * dir
       case "severity":
         return a.severity.localeCompare(b.severity) * dir
       case "status":
         return a.status.localeCompare(b.status) * dir
-      case "date":
-        return (new Date(a.date).getTime() - new Date(b.date).getTime()) * dir
+      case "createdAt":
+        return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * dir
+      default:
+        return 0;
     }
   })
 
@@ -145,56 +145,13 @@ export default function IncidentsPage() {
     return pages
   }
 
-  // Persist preferences
-  React.useEffect(() => {
-    try {
-      localStorage.setItem("incidents:density", density)
-    } catch {}
-  }, [density])
-  React.useEffect(() => {
-    try {
-      localStorage.setItem("incidents:visible", JSON.stringify(visible))
-    } catch {}
-  }, [visible])
-  React.useEffect(() => {
-    try {
-      localStorage.setItem("incidents:filterStatus", filterStatus)
-      localStorage.setItem("incidents:search", searchQuery)
-    } catch {}
-  }, [filterStatus, searchQuery])
-  React.useEffect(() => {
-    try {
-      const fs = localStorage.getItem("incidents:filterStatus")
-      const sq = localStorage.getItem("incidents:search")
-      if (fs) setFilterStatus(fs)
-      if (sq) setSearchQuery(sq)
-    } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const handleResolveIncident = (incidentId: number, resolution: string) => {
-    setConfirmState({
-      open: true,
-      title: "Marquer comme résolu ?",
-      description: "Une notification sera envoyée aux parties concernées.",
-      onConfirm: () => {
-        toast({
-          title: "Incident résolu",
-          description: "L'incident a été marqué comme résolu et les parties ont été notifiées.",
-        })
-        setConfirmState({ ...confirmState, open: false })
-        setSelectedIncident(null)
-      },
-    })
-  }
-
   const getSeverityBadge = (severity: string) => {
     const variants: Record<string, { label: string; className: string }> = {
-      low: { label: "Faible", className: "bg-chart-3/10 text-chart-3 border-chart-3/20" },
-      medium: { label: "Moyen", className: "bg-chart-2/10 text-chart-2 border-chart-2/20" },
-      high: { label: "Élevé", className: "bg-destructive/10 text-destructive border-destructive/20" },
+      LOW: { label: "Faible", className: "bg-chart-3/10 text-chart-3 border-chart-3/20" },
+      MEDIUM: { label: "Moyen", className: "bg-chart-2/10 text-chart-2 border-chart-2/20" },
+      HIGH: { label: "Élevé", className: "bg-destructive/10 text-destructive border-destructive/20" },
     }
-    const variant = variants[severity] || variants.medium
+    const variant = variants[severity] || variants.MEDIUM
     return (
       <Badge variant="outline" className={variant.className}>
         {variant.label}
@@ -204,11 +161,12 @@ export default function IncidentsPage() {
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { label: string; className: string }> = {
-      open: { label: "Ouvert", className: "bg-chart-4/10 text-chart-4 border-chart-4/20" },
-      investigating: { label: "En cours", className: "bg-chart-3/10 text-chart-3 border-chart-3/20" },
-      resolved: { label: "Résolu", className: "bg-accent/10 text-accent border-accent/20" },
+      OPEN: { label: "Ouvert", className: "bg-chart-4/10 text-chart-4 border-chart-4/20" },
+      UNDER_REVIEW: { label: "En cours", className: "bg-chart-3/10 text-chart-3 border-chart-3/20" },
+      RESOLVED: { label: "Résolu", className: "bg-accent/10 text-accent border-accent/20" },
+      CLOSED: { label: "Fermé", className: "bg-muted/10 text-muted-foreground border-muted/20" },
     }
-    const variant = variants[status] || variants.open
+    const variant = variants[status] || variants.OPEN
     return (
       <Badge variant="outline" className={variant.className}>
         {variant.label}
@@ -218,13 +176,104 @@ export default function IncidentsPage() {
 
   const getTypeLabel = (type: string) => {
     const types: Record<string, string> = {
-      retard: "Retard",
-      comportement: "Comportement",
-      annulation: "Annulation",
-      securite: "Sécurité",
+      DELAY: "Retard",
+      BEHAVIOR: "Comportement",
+      CANCELLATION: "Annulation",
+      SAFETY: "Sécurité",
+      OTHER: "Autre",
     }
     return types[type] || type
   }
+
+  const renderTableBody = () => {
+    if (loading) {
+      return Array.from({ length: 5 }).map((_, i) => (
+        <TableRow key={i}>
+          <TableCell><Skeleton className="h-5 w-32" /></TableCell>
+          {visible.concerning && <TableCell><Skeleton className="h-5 w-32" /></TableCell>}
+          {visible.trip && <TableCell><Skeleton className="h-5 w-24" /></TableCell>}
+          {visible.type && <TableCell><Skeleton className="h-5 w-24" /></TableCell>}
+          <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+          {visible.status && <TableCell><Skeleton className="h-5 w-24" /></TableCell>}
+          {visible.date && <TableCell><Skeleton className="h-5 w-24" /></TableCell>}
+          {visible.actions && <TableCell><Skeleton className="h-8 w-10" /></TableCell>}
+        </TableRow>
+      ));
+    }
+    if (error) {
+      return <TableRow><TableCell colSpan={8} className="text-center text-destructive">{error}</TableCell></TableRow>
+    }
+    if (paginatedIncidents.length === 0) {
+      return (
+        <TableRow>
+          <TableCell colSpan={8}>
+            <Empty className="border mt-4">
+              <EmptyHeader>
+                <EmptyMedia variant="icon"><AlertTriangle className="h-5 w-5" /></EmptyMedia>
+                <EmptyTitle>Aucun incident trouvé</EmptyTitle>
+                <EmptyDescription>Modifiez les filtres ou réinitialisez la recherche.</EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setSearchQuery("")}>Effacer la recherche</Button>
+                  <Button variant="secondary" size="sm" onClick={() => setFilterStatus("all")}>Statut: Tous</Button>
+                </div>
+              </EmptyContent>
+            </Empty>
+          </TableCell>
+        </TableRow>
+      );
+    }
+    return paginatedIncidents.map((incident) => (
+      <TableRow key={incident.id} className={density === "compact" ? "h-10" : "h-14"}>
+        <TableCell>
+          <div className="flex items-center gap-2">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="text-xs">
+                {incident.reporterFirstName.charAt(0)}{incident.reporterLastName.charAt(0)}
+              </AvatarFallback>
+            </Avatar>
+            <span className="text-sm">{incident.reporterFirstName} {incident.reporterLastName}</span>
+          </div>
+        </TableCell>
+        {visible.concerning && <TableCell>
+          <div className="flex items-center gap-2">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback>
+                {incident.driverFirstName.charAt(0)}{incident.driverLastName.charAt(0)}
+              </AvatarFallback>
+            </Avatar>
+            <span className="text-sm">{incident.driverFirstName} {incident.driverLastName}</span>
+          </div>
+        </TableCell>}
+        {visible.trip && <TableCell>
+          <Badge variant="outline" className="font-mono text-xs">
+            TRP-{incident.bookingId}
+          </Badge>
+        </TableCell>}
+        {visible.type && <TableCell>
+          <span className="text-sm capitalize">{getTypeLabel(incident.reason)}</span>
+        </TableCell>}
+        <TableCell>{getSeverityBadge(incident.severity)}</TableCell>
+        {visible.status && <TableCell>{getStatusBadge(incident.status)}</TableCell>}
+        {visible.date && <TableCell className="text-sm text-muted-foreground">{new Date(incident.createdAt).toLocaleDateString('fr-FR')}</TableCell>}
+        {visible.actions && <TableCell>
+          <div className="flex items-center justify-end gap-2">
+            <Button aria-label="Voir détails incident" variant="ghost" size="icon" onClick={() => setSelectedIncident(incident)}>
+              <Eye className="h-4 w-4" />
+            </Button>
+          </div>
+        </TableCell>}
+      </TableRow>
+    ));
+  }
+
+  const totals = {
+    open: incidents.filter((i) => i.status === "OPEN").length,
+    underReview: incidents.filter((i) => i.status === "UNDER_REVIEW").length,
+    resolved: incidents.filter((i) => i.status === "RESOLVED").length,
+    all: incidents.length,
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -253,7 +302,7 @@ export default function IncidentsPage() {
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Incidents ouverts</p>
-                  <p className="text-3xl font-bold">{mockIncidents.filter((i) => i.status === "open").length}</p>
+                  <p className="text-3xl font-bold">{totals.open}</p>
                 </div>
                 <AlertTriangle className="h-8 w-8 text-chart-4" />
               </div>
@@ -264,9 +313,7 @@ export default function IncidentsPage() {
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">En investigation</p>
-                  <p className="text-3xl font-bold">
-                    {mockIncidents.filter((i) => i.status === "investigating").length}
-                  </p>
+                  <p className="text-3xl font-bold">{totals.underReview}</p>
                 </div>
                 <Clock className="h-8 w-8 text-chart-3" />
               </div>
@@ -277,7 +324,7 @@ export default function IncidentsPage() {
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Résolus ce mois</p>
-                  <p className="text-3xl font-bold">{mockIncidents.filter((i) => i.status === "resolved").length}</p>
+                  <p className="text-3xl font-bold">{totals.resolved}</p>
                 </div>
                 <CheckCircle className="h-8 w-8 text-accent" />
               </div>
@@ -288,7 +335,7 @@ export default function IncidentsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Liste des incidents</CardTitle>
-            <CardDescription>Total: {mockIncidents.length} incidents signalés</CardDescription>
+            <CardDescription>Total: {totals.all} incidents signalés</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -310,9 +357,10 @@ export default function IncidentsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tous les statuts</SelectItem>
-                    <SelectItem value="open">Ouverts</SelectItem>
-                    <SelectItem value="investigating">En cours</SelectItem>
-                    <SelectItem value="resolved">Résolus</SelectItem>
+                    <SelectItem value="OPEN">Ouverts</SelectItem>
+                    <SelectItem value="UNDER_REVIEW">En cours</SelectItem>
+                    <SelectItem value="RESOLVED">Résolus</SelectItem>
+                    <SelectItem value="CLOSED">Fermés</SelectItem>
                   </SelectContent>
                 </Select>
                 <DropdownMenu>
@@ -378,7 +426,7 @@ export default function IncidentsPage() {
               <div className="mb-4 flex flex-wrap items-center gap-2">
                 {searchQuery && (
                   <Button variant="secondary" size="sm" className="gap-1" onClick={() => setSearchQuery("")}>
-                    <X className="h-3.5 w-3.5" />
+                    <X className="h-3.5 w-3.sh" />
                     Recherche: “{searchQuery}”
                   </Button>
                 )}
@@ -420,7 +468,7 @@ export default function IncidentsPage() {
                       </Button>
                     </TableHead>}
                     {visible.date && <TableHead>
-                      <Button variant="ghost" className="px-0" onClick={() => setSort((s) => ({ key: "date", dir: s.key === "date" && s.dir === "asc" ? "desc" : "asc" }))}>
+                      <Button variant="ghost" className="px-0" onClick={() => setSort((s) => ({ key: "createdAt", dir: s.key === "createdAt" && s.dir === "asc" ? "desc" : "asc" }))}>
                         Date
                         <ArrowUpDown className="ml-1 h-3.5 w-3.5" />
                       </Button>
@@ -429,74 +477,7 @@ export default function IncidentsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedIncidents.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8}>
-                        <Empty className="border mt-4">
-                          <EmptyHeader>
-                            <EmptyMedia variant="icon">
-                              <AlertTriangle className="h-5 w-5" />
-                            </EmptyMedia>
-                            <EmptyTitle>Aucun incident trouvé</EmptyTitle>
-                            <EmptyDescription>Modifiez les filtres ou réinitialisez la recherche.</EmptyDescription>
-                          </EmptyHeader>
-                          <EmptyContent>
-                            <div className="flex gap-2">
-                              <Button variant="outline" size="sm" onClick={() => setSearchQuery("")}>Effacer la recherche</Button>
-                              <Button variant="secondary" size="sm" onClick={() => setFilterStatus("all")}>Statut: Tous</Button>
-                            </div>
-                          </EmptyContent>
-                        </Empty>
-                      </TableCell>
-                    </TableRow>
-                  ) : paginatedIncidents.map((incident) => (
-                    <TableRow key={incident.id} className={density === "compact" ? "h-10" : "h-14"}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-8 w-8">
-                            <AvatarFallback className="text-xs">
-                              {incident.reporter
-                                .split(" ")
-                                .map((n) => n[0])
-                                .join("")}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-sm">{incident.reporter}</span>
-                        </div>
-                      </TableCell>
-                      {visible.concerning && <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-8 w-8">
-                            <AvatarFallback className="text-xs">
-                              {incident.reported
-                                .split(" ")
-                                .map((n) => n[0])
-                                .join("")}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-sm">{incident.reported}</span>
-                        </div>
-                      </TableCell>}
-                      {visible.trip && <TableCell>
-                        <Badge variant="outline" className="font-mono text-xs">
-                          {incident.tripId}
-                        </Badge>
-                      </TableCell>}
-                      {visible.type && <TableCell>
-                        <span className="text-sm capitalize">{getTypeLabel(incident.type)}</span>
-                      </TableCell>}
-                      <TableCell>{getSeverityBadge(incident.severity)}</TableCell>
-                      {visible.status && <TableCell>{getStatusBadge(incident.status)}</TableCell>}
-                      {visible.date && <TableCell className="text-sm text-muted-foreground">{incident.date}</TableCell>}
-                      {visible.actions && <TableCell>
-                        <div className="flex items-center justify-end gap-2">
-                          <Button aria-label="Voir détails incident" variant="ghost" size="icon" onClick={() => setSelectedIncident(incident)}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>}
-                    </TableRow>
-                  ))}
+                  {renderTableBody()}
                 </TableBody>
               </Table>
             </div>
@@ -569,7 +550,7 @@ export default function IncidentsPage() {
       </div>
 
       <Dialog open={!!selectedIncident} onOpenChange={() => setSelectedIncident(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="sm:max-w-2xl w-[92vw] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Détails de l'incident</DialogTitle>
             <DialogDescription>Informations complètes et résolution</DialogDescription>
@@ -583,7 +564,7 @@ export default function IncidentsPage() {
                     {getStatusBadge(selectedIncident.status)}
                     {getSeverityBadge(selectedIncident.severity)}
                     <Badge variant="outline" className="capitalize">
-                      {getTypeLabel(selectedIncident.type)}
+                      {getTypeLabel(selectedIncident.reason)}
                     </Badge>
                   </div>
                 </div>
@@ -595,13 +576,10 @@ export default function IncidentsPage() {
                   <div className="flex items-center gap-3">
                     <Avatar>
                       <AvatarFallback>
-                        {selectedIncident.reporter
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
+                        {selectedIncident.reporterFirstName.charAt(0)}{selectedIncident.reporterLastName.charAt(0)}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="font-medium">{selectedIncident.reporter}</span>
+                    <span className="font-medium">{selectedIncident.reporterFirstName} {selectedIncident.reporterLastName}</span>
                   </div>
                 </div>
                 <div className="rounded-lg border border-border p-4">
@@ -609,13 +587,10 @@ export default function IncidentsPage() {
                   <div className="flex items-center gap-3">
                     <Avatar>
                       <AvatarFallback>
-                        {selectedIncident.reported
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
+                        {selectedIncident.driverFirstName.charAt(0)}{selectedIncident.driverLastName.charAt(0)}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="font-medium">{selectedIncident.reported}</span>
+                    <span className="font-medium">{selectedIncident.driverFirstName} {selectedIncident.driverLastName}</span>
                   </div>
                 </div>
               </div>
@@ -628,15 +603,15 @@ export default function IncidentsPage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1">
                   <p className="text-sm font-medium">Trajet concerné</p>
-                  <p className="text-sm text-muted-foreground">{selectedIncident.tripId}</p>
+                  <p className="text-sm text-muted-foreground">TRP-{selectedIncident.bookingId}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm font-medium">Date du signalement</p>
-                  <p className="text-sm text-muted-foreground">{selectedIncident.date}</p>
+                  <p className="text-sm text-muted-foreground">{new Date(selectedIncident.createdAt).toLocaleDateString('fr-FR')}</p>
                 </div>
               </div>
 
-              {selectedIncident.status !== "resolved" && (
+              {selectedIncident.status !== "RESOLVED" && (
                 <div className="space-y-2">
                   <Label htmlFor="resolution">Résolution</Label>
                   <Textarea
@@ -649,8 +624,8 @@ export default function IncidentsPage() {
             </div>
           )}
           <DialogFooter>
-            {selectedIncident?.status !== "resolved" && (
-              <Button onClick={() => selectedIncident && handleResolveIncident(selectedIncident.id, "resolved")}>
+            {selectedIncident?.status !== "RESOLVED" && (
+              <Button onClick={() => selectedIncident && handleResolveIncident(selectedIncident.id)}>
                 <CheckCircle className="mr-2 h-4 w-4" />
                 Marquer comme résolu
               </Button>

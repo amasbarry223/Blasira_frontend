@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, Filter, CheckCircle, XCircle, Eye, Ban, Mail, UserPlus, Users, X, ArrowUpDown } from "lucide-react"
+import { Search, Filter, CheckCircle, XCircle, Eye, Ban, Mail, UserPlus, Users, X, ArrowUpDown, PencilIcon } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import {
@@ -39,7 +39,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
-import { AdminService } from "@/services/AdminService"
+import { AdminService, UpdateUserRequest } from "@/services/AdminService"
+import { AuthService } from "@/services/AuthService"
 import { AdminUser } from "@/models"
 import { Spinner } from "@/components/ui/spinner"
 
@@ -54,20 +55,26 @@ type DisplayUser = AdminUser & {
   joinedDate?: string;
 }
 
+const initialNewUserState = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  password: "",
+  phoneNumber: "",
+  acceptedTrustCharter: true, // Default to true for admin creation
+  role: "user", // Default role
+}
+
 export default function UsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedUser, setSelectedUser] = useState<DisplayUser | null>(null)
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [editedUser, setEditedUser] = useState<Partial<UpdateUserRequest>>({})
   const [filterStatus, setFilterStatus] = useState<string>("all")
   const [showAddDialog, setShowAddDialog] = useState(false)
-  const [newUser, setNewUser] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    role: "student",
-    status: "active",
-  })
+  const [newUser, setNewUser] = useState(initialNewUserState)
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; description?: string; onConfirm: () => void }>({ open: false, title: "", description: "", onConfirm: () => {} })
   const [sort, setSort] = useState<{ key: "name" | "status" | "role" | "tripsCount" | "rating"; dir: "asc" | "desc" }>({ key: "name", dir: "asc" })
   const [density, setDensity] = useState<"spacious" | "compact">(() => (typeof window !== "undefined" ? (localStorage.getItem("users:density") as "spacious" | "compact") || "spacious" : "spacious"))
@@ -80,56 +87,103 @@ export default function UsersPage() {
   })
 
   const adminService = React.useMemo(() => new AdminService(), [])
+  const authService = React.useMemo(() => new AuthService(), [])
+
+  const loadUsers = React.useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const data = await adminService.getAllUsers()
+      setUsers(data)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erreur lors du chargement des utilisateurs'
+      toast.error("Erreur", {
+        description: errorMessage,
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [adminService])
+
 
   // Charger les utilisateurs depuis l'API
   useEffect(() => {
-    const loadUsers = async () => {
-      setIsLoading(true)
-      try {
-        const data = await adminService.getAllUsers()
-        setUsers(data)
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Erreur lors du chargement des utilisateurs'
-        toast.error("Erreur", {
-          description: errorMessage,
-        })
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
     loadUsers()
-  }, [adminService, toast])
+  }, [loadUsers])
 
   // Convertir les utilisateurs de l'API en format d'affichage
-  const displayUsers: DisplayUser[] = users.map((user) => ({
-    ...user,
-    name: `${user.firstName} ${user.lastName}`,
-    status: "active", // Par défaut, vous pouvez adapter selon vos besoins
-    role: user.roles.includes("ROLE_ADMIN") ? "admin" : user.roles.includes("ROLE_USER") ? "user" : "user",
-    tripsCount: 0, // À adapter si vous avez ces données
-    rating: 0, // À adapter si vous avez ces données
-    joinedDate: "", // À adapter si vous avez ces données
-  }))
+  const displayUsers: DisplayUser[] = users.map((user) => {
+    const getRole = (roles: string[]) => {
+      if (roles.includes("ROLE_ADMIN")) return "admin"
+      if (roles.includes("ROLE_DRIVER")) return "driver"
+      if (roles.includes("ROLE_STUDENT")) return "student"
+      if (roles.includes("ROLE_USER")) return "user"
+      return "user"
+    }
+    
+    return {
+      ...user,
+      name: `${user.firstName} ${user.lastName}`,
+      status: "active", // API does not provide this, so we keep a default
+      role: getRole(user.roles),
+      tripsCount: user.nombreDeTrajet,
+      rating: user.note,
+      joinedDate: "", // API does not provide this
+    }
+  })
 
-  const handleCreateUser = () => {
-    if (!newUser.name || !newUser.email) {
+  const handleCreateUser = async () => {
+    // Validation
+    if (!newUser.firstName || !newUser.lastName || !newUser.email || !newUser.password || !newUser.phoneNumber) {
       toast.error("Champs requis", {
-        description: "Veuillez renseigner au minimum le nom et l'email.",
+        description: "Veuillez remplir tous les champs obligatoires.",
       })
       return
     }
-    toast.success("Utilisateur ajouté", {
-      description: `${newUser.name} a été créé avec succès.`,
-    })
-    setShowAddDialog(false)
-    setNewUser({
-      name: "",
-      email: "",
-      phone: "",
-      role: "student",
-      status: "active",
-    })
+
+    try {
+      const response = await authService.signup({
+        firstName: newUser.firstName,
+        lastName: newUser.lastName,
+        email: newUser.email,
+        password: newUser.password,
+        phoneNumber: newUser.phoneNumber,
+        acceptedTrustCharter: newUser.acceptedTrustCharter,
+      })
+      
+      toast.success("Utilisateur ajouté", {
+        description: response.message || `${newUser.firstName} ${newUser.lastName} a été créé avec succès.`,
+      })
+      
+      setShowAddDialog(false)
+      setNewUser(initialNewUserState)
+      await loadUsers() // Recharger la liste des utilisateurs
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue."
+      toast.error("Échec de la création", {
+        description: errorMessage,
+      })
+    }
+  }
+
+  const handleUpdateUser = async () => {
+    if (!selectedUser || !editedUser) return;
+
+    try {
+      // @ts-ignore
+      const updatedUser = await adminService.updateUser(selectedUser.id, editedUser);
+      toast.success("Utilisateur mis à jour", {
+        description: `${updatedUser.firstName} ${updatedUser.lastName} a été mis à jour avec succès.`,
+      });
+      setIsEditMode(false);
+      setSelectedUser(null);
+      await loadUsers();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue.";
+      toast.error("Échec de la mise à jour", {
+        description: errorMessage,
+      });
+    }
   }
 
   const filteredUsers = displayUsers.filter((user) => {
@@ -557,6 +611,24 @@ export default function UsersPage() {
                           <Button aria-label="Voir détails utilisateur" variant="ghost" size="icon" onClick={() => setSelectedUser(user)}>
                             <Eye className="h-4 w-4" />
                           </Button>
+                          <Button
+                            aria-label="Modifier utilisateur"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setSelectedUser(user)
+                              setEditedUser({
+                                firstName: user.firstName,
+                                lastName: user.lastName,
+                                email: user.email,
+                                phoneNumber: user.phone || '',
+                                roles: user.roles,
+                              })
+                              setIsEditMode(true)
+                            }}
+                          >
+                            <PencilIcon className="h-4 w-4" />
+                          </Button>
                           {user.status === "pending" && (
                             <Button aria-label="Vérifier utilisateur" variant="ghost" size="icon" onClick={() => handleVerifyUser(user.id, true)}>
                               <CheckCircle className="h-4 w-4 text-accent" />
@@ -646,20 +718,29 @@ export default function UsersPage() {
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>Ajouter un utilisateur</DialogTitle>
-            <DialogDescription>Renseignez les informations de base</DialogDescription>
+            <DialogTitle>Ajouter un nouvel utilisateur</DialogTitle>
+            <DialogDescription>Renseignez les informations pour créer un nouveau compte.</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="new-name">Nom complet</Label>
+          <div className="grid gap-4 py-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="new-firstName">Prénom</Label>
               <Input
-                id="new-name"
-                value={newUser.name}
-                onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-                placeholder="Ex: Fatoumata Traoré"
+                id="new-firstName"
+                value={newUser.firstName}
+                onChange={(e) => setNewUser({ ...newUser, firstName: e.target.value })}
+                placeholder="Ex: Fatoumata"
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="new-lastName">Nom</Label>
+              <Input
+                id="new-lastName"
+                value={newUser.lastName}
+                onChange={(e) => setNewUser({ ...newUser, lastName: e.target.value })}
+                placeholder="Ex: Traoré"
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="new-email">Email</Label>
               <Input
                 id="new-email"
@@ -673,43 +754,30 @@ export default function UsersPage() {
               <Label htmlFor="new-phone">Téléphone</Label>
               <Input
                 id="new-phone"
-                value={newUser.phone}
-                onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
+                value={newUser.phoneNumber}
+                onChange={(e) => setNewUser({ ...newUser, phoneNumber: e.target.value })}
                 placeholder="+223 70 00 00 00"
               />
             </div>
             <div className="space-y-2">
-              <Label>Rôle</Label>
-              <Select
-                value={newUser.role}
-                onValueChange={(v) => setNewUser({ ...newUser, role: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="student">Étudiant</SelectItem>
-                  <SelectItem value="driver">Conducteur</SelectItem>
-                  <SelectItem value="passenger">Passager</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label htmlFor="new-password">Mot de passe</Label>
+              <Input
+                id="new-password"
+                type="password"
+                value={newUser.password}
+                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                placeholder="••••••••"
+              />
             </div>
-            <div className="space-y-2">
-              <Label>Statut</Label>
-              <Select
-                value={newUser.status}
-                onValueChange={(v) => setNewUser({ ...newUser, status: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Actif</SelectItem>
-                  <SelectItem value="pending">En attente</SelectItem>
-                  <SelectItem value="verified">Vérifié</SelectItem>
-                  <SelectItem value="suspended">Suspendu</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="sm:col-span-2 flex items-center space-x-2 pt-2">
+              <Checkbox
+                id="new-acceptedTrustCharter"
+                checked={newUser.acceptedTrustCharter}
+                onCheckedChange={(checked) => setNewUser({ ...newUser, acceptedTrustCharter: Boolean(checked) })}
+              />
+              <Label htmlFor="new-acceptedTrustCharter" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                L'utilisateur accepte la charte de confiance
+              </Label>
             </div>
           </div>
           <DialogFooter className="sm:justify-between">
@@ -717,20 +785,27 @@ export default function UsersPage() {
               Annuler
             </Button>
             <Button onClick={handleCreateUser}>
-              Enregistrer
+              Créer l'utilisateur
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!selectedUser} onOpenChange={() => setSelectedUser(null)}>
+      <Dialog open={!!selectedUser} onOpenChange={(open) => {
+        if (!open) {
+          setSelectedUser(null)
+          setIsEditMode(false)
+        }
+      }}>
         <DialogContent className="max-w-3xl sm:max-w-3xl w-[92vw] max-h-[85vh] overflow-auto">
           <DialogHeader>
-            <DialogTitle>Détails de l'utilisateur</DialogTitle>
-            <DialogDescription>Informations complètes et historique</DialogDescription>
+            <DialogTitle>{isEditMode ? "Modifier l'utilisateur" : "Détails de l'utilisateur"}</DialogTitle>
+            <DialogDescription>
+              {isEditMode ? "Modifiez les informations ci-dessous." : "Informations complètes et historique."}
+            </DialogDescription>
           </DialogHeader>
           {selectedUser && (
-            <div className="space-y-6">
+            <div className="space-y-6 py-4">
               <div className="flex items-start gap-4">
                 <Avatar className="h-16 w-16">
                   <AvatarImage
@@ -744,25 +819,59 @@ export default function UsersPage() {
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold">{selectedUser.name}</h3>
+                  {isEditMode ? (
+                    <div className="grid grid-cols-2 gap-4">
+                       <div className="space-y-2">
+                        <Label htmlFor="edit-firstName">Prénom</Label>
+                        <Input
+                          id="edit-firstName"
+                          value={editedUser.firstName || ''}
+                          onChange={(e) => setEditedUser({ ...editedUser, firstName: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-lastName">Nom</Label>
+                        <Input
+                          id="edit-lastName"
+                          value={editedUser.lastName || ''}
+                          onChange={(e) => setEditedUser({ ...editedUser, lastName: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <h3 className="text-lg font-semibold">{selectedUser.name}</h3>
+                  )}
                   <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
-                  <div className="mt-2 flex items-center gap-2">
-                    {getStatusBadge(selectedUser.status)}
-                    <Badge variant="outline" className="capitalize">
-                      {selectedUser.role}
-                    </Badge>
-                  </div>
                 </div>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1">
                   <p className="text-sm font-medium">Téléphone</p>
-                  <p className="text-sm text-muted-foreground">{selectedUser.phone}</p>
+                  {isEditMode ? (
+                     <Input
+                        value={editedUser.phoneNumber || ''}
+                        onChange={(e) => setEditedUser({ ...editedUser, phoneNumber: e.target.value })}
+                      />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{selectedUser.phone}</p>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Email</p>
+                  {isEditMode ? (
+                     <Input
+                        type="email"
+                        value={editedUser.email || ''}
+                        onChange={(e) => setEditedUser({ ...editedUser, email: e.target.value })}
+                      />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm font-medium">Date d'inscription</p>
-                  <p className="text-sm text-muted-foreground">{selectedUser.joinedDate}</p>
+                  <p className="text-sm text-muted-foreground">{selectedUser.joinedDate || 'N/A'}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm font-medium">Nombre de trajets</p>
@@ -772,62 +881,40 @@ export default function UsersPage() {
                   <p className="text-sm font-medium">Note moyenne</p>
                   <p className="text-sm text-muted-foreground">{selectedUser.rating} ★</p>
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Documents vérifiés</p>
-                <div className="rounded-lg border border-border p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Carte d'identité</span>
-                    <CheckCircle className="h-4 w-4 text-accent" />
+                 {isEditMode && (
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Nouveau mot de passe (optionnel)</p>
+                     <Input
+                        type="password"
+                        placeholder="Laisser vide pour ne pas changer"
+                        onChange={(e) => setEditedUser({ ...editedUser, password: e.target.value })}
+                      />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Email institutionnel</span>
-                    <CheckCircle className="h-4 w-4 text-accent" />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Numéro de téléphone</span>
-                    <CheckCircle className="h-4 w-4 text-accent" />
-                  </div>
-                </div>
+                 )}
               </div>
             </div>
           )}
-          <DialogFooter className="gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="w-full sm:w-auto">
-              <Button variant="secondary" className="w-full sm:w-auto">
-              <Mail className="mr-2 h-4 w-4" />
-              Envoyer un message
-            </Button>
-            </div>
-            <div className="flex w-full sm:w-auto items-center justify-end gap-2 flex-wrap">
-            {selectedUser?.status === "pending" && (
+          <DialogFooter className="gap-2">
+            {isEditMode ? (
               <>
-                <Button
-                  variant="outline"
-                  onClick={() => selectedUser && handleVerifyUser(selectedUser.id, false)}
-                >
-                  <XCircle className="mr-2 h-4 w-4" />
-                  Refuser
-                </Button>
-                <Button
-                  onClick={() => selectedUser && handleVerifyUser(selectedUser.id, true)}
-                >
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Vérifier
-                </Button>
+                <Button variant="outline" onClick={() => setIsEditMode(false)}>Annuler</Button>
+                <Button onClick={handleUpdateUser}>Enregistrer</Button>
               </>
-            )}
-            {selectedUser?.status !== "suspended" && (
-              <Button
-                variant="destructive"
-                onClick={() => selectedUser && handleSuspendUser(selectedUser.id)}
-              >
-                <Ban className="mr-2 h-4 w-4" />
-                Suspendre
+            ) : (
+              <Button onClick={() => {
+                setEditedUser({
+                  firstName: selectedUser?.firstName,
+                  lastName: selectedUser?.lastName,
+                  email: selectedUser?.email,
+                  phoneNumber: selectedUser?.phone || '',
+                  roles: selectedUser?.roles,
+                })
+                setIsEditMode(true)
+              }}>
+                <PencilIcon className="mr-2 h-4 w-4" />
+                Modifier
               </Button>
             )}
-            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
