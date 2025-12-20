@@ -73,6 +73,17 @@ export class MessageService {
     // Assuming no return body needed for a broadcast
   }
 
+  async getAdminNotificationHistory(): Promise<NotificationHistoryItem[]> {
+    const response = await fetch(`${this.baseUrl}/admin/notifications/history`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: 'Failed to fetch notification history' }));
+      throw new Error(errorData.message || `Failed to fetch notification history: ${response.status}`);
+    }
+    return response.json();
+  }
+
   async update(id: number, data: UpdateMessageDto): Promise<Message> {
     const response = await fetch(`${this.baseUrl}/messages/${id}`, {
       method: 'PUT',

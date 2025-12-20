@@ -20,3 +20,4 @@ export * from './UserRole';
 export * from './Vehicle';
 export * from './VerificationRequest';
 export * from './Support';
+export * from './Notification';
