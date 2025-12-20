@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/form'
 import { AuthService } from '@/services/AuthService'
 import { saveToken } from '@/lib/auth'
+import { RateLimiter } from '@/lib/security'
 
 
 const schema = z.object({
@@ -154,11 +155,35 @@ export function LoginForm({ className }: { className?: string }) {
 		form.clearErrors('phone')
 		form.clearErrors('password')
 
+		// 🔒 SECURITY: Vérifier le rate limiting avant la tentative de connexion
+		const clientId = values.phone || 'anonymous'
+		const rateLimit = RateLimiter.checkLimit(clientId)
+
+		if (!rateLimit.allowed) {
+			const minutesRemaining = rateLimit.lockoutUntil
+				? Math.ceil((rateLimit.lockoutUntil - Date.now()) / 60000)
+				: 15
+
+			setErrorType('general')
+			setErrorMessage(`Trop de tentatives de connexion. Veuillez réessayer dans ${minutesRemaining} minute(s).`)
+
+			toast.error('Trop de tentatives', {
+				description: `Veuillez réessayer dans ${minutesRemaining} minute(s).`,
+				duration: 10000,
+			})
+
+			setIsSubmitting(false)
+			return
+		}
+
 		try {
 			const response = await authService.login({
 				phoneNumber: values.phone,
 				password: values.password,
 			})
+
+			// 🔒 SECURITY: Réinitialiser les tentatives en cas de succès
+			RateLimiter.resetAttempts(clientId)
 
 			// Sauvegarder le token
 			saveToken(response.token)
@@ -171,6 +196,9 @@ export function LoginForm({ className }: { className?: string }) {
 			// Redirection vers le tableau de bord
 			router.push('/admin/dashboard')
 		} catch (error) {
+			// 🔒 SECURITY: Enregistrer l'échec pour le rate limiting
+			RateLimiter.recordAttempt(clientId)
+
 			const parsedError = parseError(error)
 
 			setErrorType(parsedError.type)

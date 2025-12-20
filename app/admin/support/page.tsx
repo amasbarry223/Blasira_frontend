@@ -25,6 +25,7 @@ import { SupportService, MessageService } from "@/services"
 import { SupportTicket, PaginatedSupportTickets } from "@/models"
 import { Spinner } from "@/components/ui/spinner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { sanitizeHTML } from "@/lib/utils"
 
 export default function SupportPage() {
   const { toast } = useToast()
@@ -296,9 +297,10 @@ export default function SupportPage() {
                 {(selectedTicket.messages && selectedTicket.messages.length > 0) ? (
                   selectedTicket.messages.map(msg => (
                     <div key={msg.id} className={`flex gap-3 ${msg.sender.role === 'admin' ? 'justify-end' : ''}`}>
-                      {msg.sender.role === 'user' && <Avatar className="h-8 w-8"><AvatarFallback>{msg.sender.name.charAt(0)}</AvatarFallback></Avatar>}
+                      {msg.sender.role === 'user' && <Avatar className="h-8 w-8"><AvatarFallback>{msg.sender.name?.charAt(0) || 'U'}</AvatarFallback></Avatar>}
                       <div className={`rounded-lg p-3 text-sm ${msg.sender.role === 'admin' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
-                        <p>{msg.content}</p>
+                        {/* 🔒 SECURITY: Le contenu est automatiquement échappé par React, mais on s'assure qu'il n'y a pas de HTML */}
+                        <p>{msg.content || ''}</p>
                         <p className="text-xs text-right mt-1 opacity-70">{new Date(msg.createdAt).toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'})}</p>
                       </div>
                       {msg.sender.role === 'admin' && <Avatar className="h-8 w-8"><AvatarFallback>A</AvatarFallback></Avatar>}

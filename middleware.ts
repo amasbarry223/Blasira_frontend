@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Routes publiques qui ne nécessitent pas d'authentification
-  const publicRoutes = ['/login'];
+  const publicRoutes = ['/login', '/landing'];
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
 
   // Routes protégées (admin)
@@ -14,17 +14,49 @@ export function middleware(request: NextRequest) {
   // Vérifier le token dans les cookies
   const token = request.cookies.get('blasira_auth_token')?.value;
 
-  // Si c'est une route protégée et pas de token, laisser le client gérer la redirection
-  // Le composant AuthGuard s'en chargera côté client (car le token est dans localStorage)
-  // Note: Pour une sécurité complète côté serveur, vous devriez synchroniser le token
-  // entre localStorage et cookies lors du login
-
-  // Si l'utilisateur est sur /login et a déjà un token dans les cookies, rediriger
+  // 🔒 SECURITY: Si l'utilisateur est sur /login et a déjà un token valide, rediriger
   if (pathname === '/login' && token) {
+    // ⚠️ NOTE: En production, valider le token avec le backend
+    // Pour l'instant, on vérifie juste sa présence
+    // TODO: Implémenter la validation du token avec le backend
+    // try {
+    //   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+    //   const response = await fetch(`${apiUrl}/auth/validate`, {
+    //     headers: { 'Authorization': `Bearer ${token}` },
+    //   });
+    //   if (response.ok) {
+    //     return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+    //   }
+    // } catch {
+    //   // Si la validation échoue, laisser passer pour que AuthGuard gère
+    // }
     return NextResponse.redirect(new URL('/admin/dashboard', request.url));
   }
 
-  return NextResponse.next();
+  // 🔒 SECURITY: Pour les routes protégées, vérifier le token
+  // Note: La validation complète se fait côté client avec AuthGuard
+  // En production, implémenter la validation serveur ici
+  if (isProtectedRoute && !token) {
+    // Rediriger vers login si pas de token
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  // 🔒 SECURITY: Ajouter les headers de sécurité à toutes les réponses
+  const response = NextResponse.next();
+  
+  // Headers de sécurité
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('X-Frame-Options', 'DENY');
+  response.headers.set('X-XSS-Protection', '1; mode=block');
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  
+  // Permissions Policy
+  response.headers.set(
+    'Permissions-Policy',
+    'camera=(), microphone=(), geolocation=(), payment=()'
+  );
+
+  return response;
 }
 
 export const config = {

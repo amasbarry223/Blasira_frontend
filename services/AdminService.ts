@@ -22,8 +22,10 @@ export interface UpdateUserRequest {
 export class AdminService {
   private baseUrl: string;
 
-  constructor(baseUrl: string = 'http://localhost:8080/api') {
-    this.baseUrl = baseUrl;
+  constructor(baseUrl?: string) {
+    // ⚠️ SECURITY: Utiliser une variable d'environnement
+    // Ne jamais hardcoder l'URL de l'API
+    this.baseUrl = baseUrl || process.env.NEXT_PUBLIC_API_URL || '/api';
   }
 
   async getAllUsers(): Promise<AdminUser[]> {
